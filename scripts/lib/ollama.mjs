@@ -44,5 +44,13 @@ export function extractJson(text) {
   const start = body.indexOf("{");
   const end = body.lastIndexOf("}");
   if (start === -1 || end === -1) throw new Error("JSON 객체를 찾을 수 없음");
-  return JSON.parse(body.slice(start, end + 1));
+  const slice = body.slice(start, end + 1);
+  try {
+    return JSON.parse(slice);
+  } catch (e) {
+    // Show where the model's output broke so a recurring pattern can be fixed in the prompt.
+    const pos = Number(/position (\d+)/.exec(e.message)?.[1] ?? -1);
+    const around = pos >= 0 ? slice.slice(Math.max(0, pos - 160), pos + 80) : slice.slice(0, 240);
+    throw new Error(`${e.message}\n    near: ${JSON.stringify(around)}`);
+  }
 }

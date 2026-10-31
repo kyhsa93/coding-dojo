@@ -19,6 +19,10 @@ on:
         type: choice
         options: ["", "easy", "medium", "hard"]
         default: ""
+      max_attempts:
+        description: "슬롯당 최대 시도 횟수"
+        type: number
+        default: 4
       rejudge:
         description: "재판정할 문제 id (쉼표 구분, all = 생성된 문제 전부). 지정하면 생성 대신 재판정만 한다"
         type: string
@@ -42,6 +46,7 @@ jobs:
       TOPIC: ${{ inputs.topic }}
       DIFFICULTY: ${{ inputs.difficulty }}
       REJUDGE: ${{ inputs.rejudge }}
+      MAX_ATTEMPTS: ${{ inputs.max_attempts || 4 }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
