@@ -1,0 +1,285 @@
+{
+  "id": "interval-min-max-product",
+  "title": "구간의 최소와 최대의 곱",
+  "difficulty": "hard",
+  "tags": [
+    "intervals"
+  ],
+  "statement": "주어진 구간 목록에서, 각 구간의 최소값과 최대값을 계산한 후, 그 곱을 모두 더한 값을 반환하세요. 구간은 [start, end] 형태로 주어지며, start <= end를 항상 만족합니다. 구간 목록은 비어 있을 수 있으며, 구간 내부에 중복이 있을 수 있습니다. 예를 들어, [[1, 3], [2, 5]]의 경우, 첫 번째 구간의 최소는 1, 최대는 3, 두 번째 구간의 최소는 2, 최대는 5, 따라서 1*3 + 2*5 = 3 + 10 = 13을 반환합니다. 입력 크기는 최대 10^5 개의 구간이며, 구간의 start와 end는 -10^9에서 10^9 사이의 정수입니다.",
+  "functionName": "intervalMinMaxProductSum",
+  "params": [
+    {
+      "name": "intervals",
+      "type": "number[][]"
+    }
+  ],
+  "returnType": "number",
+  "starterCode": {
+    "javascript": "function intervalMinMaxProductSum(intervals) {\n  // 여기에 코드를 작성하세요\n}\n",
+    "typescript": "function intervalMinMaxProductSum(intervals: number[][]): number {\n  // 여기에 코드를 작성하세요\n}\n",
+    "python": "def intervalMinMaxProductSum(intervals: list[list[int]]) -> int:\n    # 여기에 코드를 작성하세요\n    pass\n"
+  },
+  "examples": [
+    {
+      "input": [
+        [
+          [
+            1,
+            3
+          ],
+          [
+            2,
+            5
+          ]
+        ]
+      ],
+      "expected": 13,
+      "explanation": "각 구간의 최소와 최대의 곱을 더한 값은 1*3 + 2*5 = 13입니다."
+    },
+    {
+      "input": [
+        [
+          [
+            -10,
+            10
+          ]
+        ]
+      ],
+      "expected": -100,
+      "explanation": "구간의 최소는 -10, 최대는 10, 곱은 -10 * 10 = -100입니다."
+    }
+  ],
+  "tests": [
+    {
+      "input": [
+        [
+          [
+            1,
+            3
+          ],
+          [
+            2,
+            5
+          ]
+        ]
+      ],
+      "expected": 13
+    },
+    {
+      "input": [
+        [
+          [
+            -10,
+            10
+          ]
+        ]
+      ],
+      "expected": -100
+    },
+    {
+      "input": [
+        [
+          [
+            -5,
+            -3
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            4,
+            6
+          ]
+        ]
+      ],
+      "expected": 39
+    },
+    {
+      "input": [
+        []
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          [
+            -1000000000,
+            1000000000
+          ]
+        ]
+      ],
+      "expected": -1000000000000000000
+    },
+    {
+      "input": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            3,
+            4
+          ],
+          [
+            5,
+            6
+          ]
+        ]
+      ],
+      "expected": 44
+    },
+    {
+      "input": [
+        [
+          [
+            5,
+            5
+          ]
+        ]
+      ],
+      "expected": 25
+    },
+    {
+      "input": [
+        [
+          [
+            -1,
+            1
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            4,
+            5
+          ]
+        ]
+      ],
+      "expected": 25
+    },
+    {
+      "input": [
+        [
+          [
+            100,
+            200
+          ],
+          [
+            300,
+            400
+          ]
+        ]
+      ],
+      "expected": 140000
+    },
+    {
+      "input": [
+        [
+          [
+            -5,
+            5
+          ],
+          [
+            -10,
+            10
+          ]
+        ]
+      ],
+      "expected": -125
+    },
+    {
+      "input": [
+        [
+          [
+            0,
+            100000
+          ]
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            4
+          ]
+        ]
+      ],
+      "expected": 20
+    },
+    {
+      "input": [
+        [
+          [
+            10,
+            10
+          ],
+          [
+            20,
+            20
+          ],
+          [
+            30,
+            30
+          ]
+        ]
+      ],
+      "expected": 1400
+    },
+    {
+      "input": [
+        [
+          [
+            -1000000000,
+            -1000000000
+          ]
+        ]
+      ],
+      "expected": 1000000000000000000
+    },
+    {
+      "input": [
+        [
+          [
+            1000000000,
+            1000000000
+          ]
+        ]
+      ],
+      "expected": 1000000000000000000
+    }
+  ],
+  "hints": [
+    "각 구간에서 최소와 최대를 계산하는 것은 O(1)입니다.",
+    "모든 구간을 순회하면서 최소와 최대를 곱한 값을 누적하면 됩니다.",
+    "입력이 빈 경우, 0을 반환해야 합니다."
+  ],
+  "solution": "function intervalMinMaxProductSum(intervals) {\n  let sum = 0;\n  for (const [start, end] of intervals) {\n    sum += start * end;\n  }\n  return sum;\n}",
+  "createdAt": "2026-10-31",
+  "source": "ollama/qwen3:14b"
+}
