@@ -51,7 +51,7 @@ async function existingProblems() {
 function buildPrompt({ topic, difficulty, existing, feedback }) {
   const avoid = existing.map((p) => `${p.id} (${p.title})`).join(", ") || "(none)";
   const feedbackBlock = feedback ? `\nYour previous attempt was rejected: ${feedback}\nFix that in this attempt.\n` : "";
-  return `You are writing one coding interview problem for a practice site. Output ONLY a JSON object, no prose, no markdown fences.
+  return `You are writing one coding interview problem for a practice site. Output ONLY a compact JSON object on a single line: no prose, no markdown fences, no newlines or indentation between fields.
 ${feedbackBlock}
 Constraints:
 - Topic: ${topic}

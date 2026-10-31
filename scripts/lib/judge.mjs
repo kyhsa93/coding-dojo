@@ -72,7 +72,7 @@ export function applyJudgement(problem, judgement) {
 /* ---------- cross-check: an independent solution written from the statement alone ---------- */
 
 export function buildCrossSolvePrompt(problem) {
-  return `Solve this coding problem from the statement alone. Output ONLY a JSON object, no prose, no markdown fences.
+  return `Solve this coding problem from the statement alone. Output ONLY a compact JSON object on a single line, no prose, no markdown fences.
 
 Write a complete, correct JavaScript (ES2022, no TypeScript, no imports, no console.log) function named "${problem.functionName}" with this signature:
 ${problem.functionName}(${problem.params.map((p) => `${p.name}: ${p.type}`).join(", ")}): ${problem.returnType}
