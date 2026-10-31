@@ -3,17 +3,19 @@
  *
  * The model proposes the statement, a JavaScript reference solution and test INPUTS only.
  * Expected outputs are always computed by running the reference solution, so a test can never
- * disagree with the solution. A problem is written only when every check in verifyCandidate passes.
+ * disagree with the solution. A problem is written only when every check in buildProblem passes
+ * AND a second model pass (judge) agrees the difficulty label is within one level of reality.
+ * One level off: the label is corrected. Two levels off (easy<->hard): the candidate is rejected
+ * and the next attempt is told why.
  *
  * Env: OLLAMA_URL, OLLAMA_MODEL, OLLAMA_THINK=false, COUNT, TOPIC, DIFFICULTY, MAX_ATTEMPTS
  */
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DIFFICULTIES, LANGUAGES, loadSolution, runCase, starterFor, validateShape, verifySolution } from "./lib/problem-utils.mjs";
+import { MODEL, callOllama, extractJson } from "./lib/ollama.mjs";
+import { buildJudgePrompt, parseJudgement, reconcileDifficulty } from "./lib/judge.mjs";
 
-const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://127.0.0.1:11434";
-const MODEL = process.env.OLLAMA_MODEL ?? "qwen3:14b";
-const DISABLE_THINKING = process.env.OLLAMA_THINK === "false";
 const COUNT = Math.max(1, Number(process.env.COUNT ?? 1));
 const MAX_ATTEMPTS = Math.max(1, Number(process.env.MAX_ATTEMPTS ?? 4));
 const problemsDir = path.resolve(import.meta.dirname, "../problems");
@@ -42,13 +44,14 @@ async function existingProblems() {
   return out;
 }
 
-function buildPrompt({ topic, difficulty, existing }) {
+function buildPrompt({ topic, difficulty, existing, feedback }) {
   const avoid = existing.map((p) => `${p.id} (${p.title})`).join(", ") || "(none)";
+  const feedbackBlock = feedback ? `\nYour previous attempt was rejected: ${feedback}\nFix that in this attempt.\n` : "";
   return `You are writing one coding interview problem for a practice site. Output ONLY a JSON object, no prose, no markdown fences.
-
+${feedbackBlock}
 Constraints:
 - Topic: ${topic}
-- Difficulty: ${difficulty}
+- Difficulty: ${difficulty}. easy = one pass or direct simulation; medium = a known technique (two pointers, sliding window, binary search, BFS/DFS, prefix sums, 1-D DP, heap) applied carefully; hard = several techniques combined, a non-obvious 2-D DP or graph algorithm, or an insight most candidates miss. A reviewer will grade the real difficulty from your solution and reject a mismatch.
 - The problem must be solvable as a single pure function. No classes, no I/O, no randomness, no dates based on "now".
 - All inputs and outputs must be JSON values: numbers, strings, booleans, null, arrays, plain objects. No undefined, NaN, Infinity, functions, Map, Set, BigInt.
 - Parameter and return types use TypeScript notation limited to: number, string, boolean, number[], string[], boolean[], number[][], string[][], Record<string, number>, Record<string, string>.
@@ -74,50 +77,6 @@ JSON shape (fill every field):
   "hints": ["힌트 1", "힌트 2"],
   "solution": "function camelCaseName(nums) { ... }"
 }`;
-}
-
-async function callOllama(prompt, options) {
-  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: MODEL,
-      prompt,
-      stream: true,
-      format: "json",
-      options,
-      ...(DISABLE_THINKING ? { think: false } : {}),
-    }),
-  });
-  if (!res.ok) throw new Error(`ollama http ${res.status}`);
-  const decoder = new TextDecoder();
-  let pending = "";
-  let text = "";
-  const consume = (line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-    const chunk = JSON.parse(trimmed);
-    if (chunk.error) throw new Error(`ollama error: ${chunk.error}`);
-    if (typeof chunk.response === "string") text += chunk.response;
-  };
-  for await (const bytes of res.body) {
-    pending += decoder.decode(bytes, { stream: true });
-    const lines = pending.split("\n");
-    pending = lines.pop() ?? "";
-    for (const line of lines) consume(line);
-  }
-  consume(pending);
-  if (!text) throw new Error("ollama 응답이 비어 있음");
-  return text;
-}
-
-export function extractJson(text) {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const body = fenced ? fenced[1] : text;
-  const start = body.indexOf("{");
-  const end = body.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("JSON 객체를 찾을 수 없음");
-  return JSON.parse(body.slice(start, end + 1));
 }
 
 /** Turns a model candidate into a full problem or throws with a reason. */
@@ -187,18 +146,34 @@ export function buildProblem(candidate, { existingIds, source }) {
   return problem;
 }
 
+/** Second model pass: grade the real difficulty. Returns the judgement. */
+export async function judgeProblem(problem) {
+  const raw = await callOllama(buildJudgePrompt(problem), { temperature: 0, num_predict: 512 });
+  return parseJudgement(extractJson(raw));
+}
+
 async function generateOne({ topic, difficulty, existing }) {
   const existingIds = new Set(existing.map((p) => p.id));
-  const prompt = buildPrompt({ topic, difficulty, existing });
   const temperatures = [0.7, 0.9, 0.5, 1.0];
+  let feedback = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const temperature = temperatures[attempt % temperatures.length];
     console.log(`  attempt ${attempt + 1}/${MAX_ATTEMPTS} (temperature ${temperature})`);
     try {
+      const prompt = buildPrompt({ topic, difficulty, existing, feedback });
       const raw = await callOllama(prompt, { temperature, top_p: 0.9, num_predict: 4096 });
       const candidate = extractJson(raw);
-      const problem = buildProblem(candidate, { existingIds, source: `ollama/${MODEL}` });
-      return problem;
+      const built = buildProblem(candidate, { existingIds, source: `ollama/${MODEL}` });
+
+      const judgement = await judgeProblem(built);
+      console.log(`  judge: ${judgement.difficulty} (${judgement.algorithm})`);
+      const outcome = reconcileDifficulty(built, judgement);
+      if (outcome.action === "reject") {
+        feedback = outcome.reason;
+        throw new Error(`difficulty: ${outcome.reason}`);
+      }
+      if (outcome.action === "relabel") console.log(`  relabeled ${built.difficulty} -> ${outcome.problem.difficulty}`);
+      return outcome.problem;
     } catch (e) {
       console.log(`  rejected: ${e.message}`);
     }

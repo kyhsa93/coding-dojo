@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "node scripts/validate-problems.mjs",
-    "generate": "node scripts/generate-problem.mjs"
+    "generate": "node scripts/generate-problem.mjs",
+    "judge": "node scripts/judge-problems.mjs"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.5",
