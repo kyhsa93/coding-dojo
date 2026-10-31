@@ -1,0 +1,89 @@
+name: Generate problem
+
+on:
+  schedule:
+    # 매주 월요일 02:00 KST (일요일 17:00 UTC)
+    - cron: "0 17 * * 0"
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "생성할 문제 수"
+        type: number
+        default: 1
+      topic:
+        description: "주제 (비우면 무작위)"
+        type: string
+        default: ""
+      difficulty:
+        description: "난이도 (비우면 무작위)"
+        type: choice
+        options: ["", "easy", "medium", "hard"]
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-problem
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      OLLAMA_MODEL: qwen3:14b
+      OLLAMA_THINK: "false"
+      COUNT: ${{ inputs.count || 1 }}
+      TOPIC: ${{ inputs.topic }}
+      DIFFICULTY: ${{ inputs.difficulty }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Ollama 설치 및 모델 준비
+        env:
+          OLLAMA_VERSION: v0.32.6
+          OLLAMA_SHA256: dec2fa50d24e6868ca3c4c977d69d059399372105f951a9acc320a5a79aadcfc
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update -y && sudo apt-get install -y zstd)
+          curl -fsSL -o ollama.tar.zst \
+            "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst"
+          echo "${OLLAMA_SHA256}  ollama.tar.zst" | sha256sum -c -
+          zstd -d ollama.tar.zst -o ollama.tar
+          sudo tar -xf ollama.tar -C /usr/local
+          rm -f ollama.tar.zst ollama.tar
+
+          ollama serve &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:11434/api/version > /dev/null && break
+            sleep 1
+          done
+          ollama pull "$OLLAMA_MODEL"
+
+      - name: 문제 생성
+        run: node scripts/generate-problem.mjs
+
+      - name: 전체 문제 검증
+        run: node scripts/validate-problems.mjs
+
+      - name: 커밋 및 푸시
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add problems
+          if git diff --cached --quiet; then
+            echo "추가된 문제 없음"
+            exit 0
+          fi
+          added=$(git diff --cached --name-only --diff-filter=A | sed 's#problems/##; s#\.json##' | tr '\n' ' ')
+          git commit -m "feat(problems): 문제 추가 ${added}"
+          git push origin HEAD:main
