@@ -4,9 +4,13 @@
  * The model proposes the statement, a JavaScript reference solution and test INPUTS only.
  * Expected outputs are always computed by running the reference solution, so a test can never
  * disagree with the solution. A problem is written only when every check in buildProblem passes
- * AND a second model pass (judge) agrees the difficulty label is within one level of reality.
- * One level off: the label is corrected. Two levels off (easy<->hard): the candidate is rejected
- * and the next attempt is told why.
+ * AND two further model passes agree with it:
+ *  1. cross-check: the model solves the problem again from the statement alone; that independent
+ *     solution must match the reference solution on every test input (catches statements that do
+ *     not describe what the solution computes). Two independent tries, either may agree.
+ *  2. judge: the real difficulty must be within one level of the label. One level off: the label
+ *     is corrected. Two levels off (easy<->hard): rejected.
+ * A rejected candidate's reason is fed into the next attempt's prompt.
  *
  * Env: OLLAMA_URL, OLLAMA_MODEL, OLLAMA_THINK=false, COUNT, TOPIC, DIFFICULTY, MAX_ATTEMPTS
  */
@@ -14,7 +18,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DIFFICULTIES, LANGUAGES, loadSolution, runCase, starterFor, validateShape, verifySolution } from "./lib/problem-utils.mjs";
 import { MODEL, callOllama, extractJson } from "./lib/ollama.mjs";
-import { buildJudgePrompt, parseJudgement, reconcileDifficulty } from "./lib/judge.mjs";
+import { buildCrossSolvePrompt, buildJudgePrompt, crossCheck, parseCrossSolution, parseJudgement, reconcileDifficulty } from "./lib/judge.mjs";
 
 const COUNT = Math.max(1, Number(process.env.COUNT ?? 1));
 const MAX_ATTEMPTS = Math.max(1, Number(process.env.MAX_ATTEMPTS ?? 4));
@@ -146,6 +150,23 @@ export function buildProblem(candidate, { existingIds, source }) {
   return problem;
 }
 
+/** Model pass: solve from the statement alone and compare. Throws with the first disagreement. */
+export async function crossVerify(problem, log = () => {}) {
+  const total = problem.examples.length + problem.tests.length;
+  let last = null;
+  for (const temperature of [0.3, 0.8]) {
+    const raw = await callOllama(buildCrossSolvePrompt(problem), { temperature, top_p: 0.9, num_predict: 4096 });
+    const result = crossCheck(problem, parseCrossSolution(extractJson(raw)));
+    if (result.ok) {
+      log(`  cross-check: independent solution agrees on ${total} inputs`);
+      return;
+    }
+    last = result;
+    log(`  cross-check: ${result.failures.length}/${total} inputs disagree (temperature ${temperature})`);
+  }
+  throw new Error(`cross-check: an independent solution written from the statement disagrees with the reference solution. ${last.failures[0]}. Either the statement is ambiguous or the solution does not implement it`);
+}
+
 /** Second model pass: grade the real difficulty. Returns the judgement. */
 export async function judgeProblem(problem) {
   const raw = await callOllama(buildJudgePrompt(problem), { temperature: 0, num_predict: 512 });
@@ -165,6 +186,13 @@ async function generateOne({ topic, difficulty, existing }) {
       const candidate = extractJson(raw);
       const built = buildProblem(candidate, { existingIds, source: `ollama/${MODEL}` });
 
+      try {
+        await crossVerify(built, console.log);
+      } catch (e) {
+        feedback = e.message;
+        throw e;
+      }
+
       const judgement = await judgeProblem(built);
       console.log(`  judge: ${judgement.difficulty} (${judgement.algorithm})`);
       const outcome = reconcileDifficulty(built, judgement);
@@ -173,6 +201,7 @@ async function generateOne({ topic, difficulty, existing }) {
         throw new Error(`difficulty: ${outcome.reason}`);
       }
       if (outcome.action === "relabel") console.log(`  relabeled ${built.difficulty} -> ${outcome.problem.difficulty}`);
+      outcome.problem.judge.crossChecked = true;
       return outcome.problem;
     } catch (e) {
       console.log(`  rejected: ${e.message}`);

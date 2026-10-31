@@ -40,7 +40,7 @@ export interface Problem {
   createdAt: string;
   source?: string;
   /** Second model pass that graded the real difficulty. Present on generated problems. */
-  judge?: { difficulty: Difficulty; algorithm: string; reason: string };
+  judge?: { difficulty: Difficulty; algorithm: string; reason: string; crossChecked?: boolean };
 }
 
 export type TestStatus = "pass" | "fail" | "error" | "timeout";

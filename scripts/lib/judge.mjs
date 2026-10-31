@@ -2,8 +2,12 @@
  * Asks the local Ollama model to judge the real difficulty of a finished problem.
  * The model sees the statement and the reference solution, and answers with
  * {difficulty, algorithm, reason}. The caller decides what to do with a mismatch.
+ *
+ * It also holds the cross-check: the model solves the problem again from the statement alone and
+ * that independent solution must agree with the reference solution on every test input. This
+ * catches statements that do not describe what the reference solution computes.
  */
-import { DIFFICULTIES } from "./problem-utils.mjs";
+import { DIFFICULTIES, deepEqual, loadSolution, runCase } from "./problem-utils.mjs";
 
 const RANK = Object.fromEntries(DIFFICULTIES.map((d, i) => [d, i]));
 
@@ -63,4 +67,56 @@ export function applyJudgement(problem, judgement) {
     difficulty: judgement.difficulty,
     judge: { difficulty: judgement.difficulty, algorithm: judgement.algorithm, reason: judgement.reason },
   };
+}
+
+/* ---------- cross-check: an independent solution written from the statement alone ---------- */
+
+export function buildCrossSolvePrompt(problem) {
+  return `Solve this coding problem from the statement alone. Output ONLY a JSON object, no prose, no markdown fences.
+
+Write a complete, correct JavaScript (ES2022, no TypeScript, no imports, no console.log) function named "${problem.functionName}" with this signature:
+${problem.functionName}(${problem.params.map((p) => `${p.name}: ${p.type}`).join(", ")}): ${problem.returnType}
+
+Follow the statement literally, including tie-breaking rules and edge cases. If the statement is ambiguous, pick the most natural reading. Each call must finish well under one second for the stated constraints.
+
+Title: ${problem.title}
+
+Statement:
+${problem.statement}
+
+JSON shape:
+{"solution": "function ${problem.functionName}(...) { ... }"}`;
+}
+
+export function parseCrossSolution(candidate) {
+  if (!candidate || typeof candidate !== "object") throw new Error("cross-solve: not an object");
+  if (typeof candidate.solution !== "string" || !candidate.solution.trim()) throw new Error("cross-solve: solution missing");
+  return candidate.solution.trim();
+}
+
+/**
+ * Runs an independent solution on every example and test input and compares it with the stored expected values.
+ * Returns {ok, failures: string[]}; a failure names the input and both outputs so the next attempt can be told.
+ */
+export function crossCheck(problem, altSolution) {
+  const failures = [];
+  let fn;
+  try {
+    fn = loadSolution(altSolution, problem.functionName);
+  } catch (e) {
+    return { ok: false, failures: [`independent solution does not load: ${e.message}`] };
+  }
+  for (const t of [...problem.examples, ...problem.tests]) {
+    let got;
+    try {
+      got = runCase(fn, t.input);
+    } catch (e) {
+      failures.push(`input ${JSON.stringify(t.input)}: independent solution threw ${e.message}`);
+      continue;
+    }
+    if (!deepEqual(got, t.expected)) {
+      failures.push(`input ${JSON.stringify(t.input)}: reference solution returns ${JSON.stringify(t.expected)}, independent solution returns ${JSON.stringify(got)}`);
+    }
+  }
+  return { ok: failures.length === 0, failures };
 }
