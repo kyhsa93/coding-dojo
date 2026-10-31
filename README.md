@@ -5,6 +5,7 @@
 - 사이트: https://kyhsa93.github.io/coding-dojo/
 - 언어: JavaScript, TypeScript(sucrase 로 브라우저 변환), Python(Pyodide, 브라우저 안에서 실행)
 - 채점: 문제마다 준비된 테스트 케이스를 Web Worker 에서 실행해 결과를 깊은 비교로 판정. 테스트당 3초 제한.
+- PWA: 홈 화면에 설치할 수 있고, 앱 셸과 문제 데이터는 서비스 워커가 미리 캐시한다. Python 런타임(Pyodide)은 처음 한 번 CDN 에서 받은 뒤 캐시에서 쓰므로 그 뒤로는 오프라인에서도 채점된다. 아이콘은 `node scripts/make-icons.mjs` 로 다시 만든다.
 - 문제 추가: GitHub Actions 가 Ollama(qwen3:14b) 로 문제를 생성하고, 참고 풀이를 실제로 실행해 테스트 기대값을 만든 뒤 검증을 통과한 문제만 커밋.
 
 ## 개발
