@@ -177,13 +177,16 @@ async function generateOne({ topic, difficulty, existing }) {
   const existingIds = new Set(existing.map((p) => p.id));
   const temperatures = [0.7, 0.9, 0.5, 1.0];
   let feedback = null;
+  // Rejected candidates join the avoid list: the model otherwise retells the same problem attempt after attempt.
+  const rejected = [];
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const temperature = temperatures[attempt % temperatures.length];
     console.log(`  attempt ${attempt + 1}/${MAX_ATTEMPTS} (temperature ${temperature})`);
     try {
-      const prompt = buildPrompt({ topic, difficulty, existing, feedback });
+      const prompt = buildPrompt({ topic, difficulty, existing: [...existing, ...rejected], feedback });
       const raw = await callOllama(prompt, { temperature, top_p: 0.9, num_predict: 4096 });
       const candidate = extractJson(raw);
+      if (candidate && typeof candidate.id === "string") rejected.push({ id: candidate.id, title: String(candidate.title ?? "") });
       const built = buildProblem(candidate, { existingIds, source: `ollama/${MODEL}` });
 
       try {
@@ -202,6 +205,7 @@ async function generateOne({ topic, difficulty, existing }) {
       }
       if (outcome.action === "relabel") console.log(`  relabeled ${built.difficulty} -> ${outcome.problem.difficulty}`);
       outcome.problem.judge.crossChecked = true;
+      rejected.pop();
       return outcome.problem;
     } catch (e) {
       console.log(`  rejected: ${e.message}`);
