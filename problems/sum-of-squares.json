@@ -225,5 +225,10 @@
   ],
   "solution": "function sumOfSquares(nums) {\n  let sum = 0;\n  for (const num of nums) {\n    sum += num * num;\n  }\n  return sum;\n}",
   "createdAt": "2026-10-31",
-  "source": "ollama/qwen3:14b"
+  "source": "ollama/qwen3:14b",
+  "judge": {
+    "difficulty": "easy",
+    "algorithm": "배열의 각 요소의 제곱을 누적하여 합산",
+    "reason": "배열을 한 번만 순회하며 각 요소의 제곱을 더하는 간단한 반복문을 사용함"
+  }
 }

@@ -1,7 +1,7 @@
 {
   "id": "interval-min-max-product",
   "title": "구간의 최소와 최대의 곱",
-  "difficulty": "hard",
+  "difficulty": "easy",
   "tags": [
     "intervals"
   ],
@@ -281,5 +281,10 @@
   ],
   "solution": "function intervalMinMaxProductSum(intervals) {\n  let sum = 0;\n  for (const [start, end] of intervals) {\n    sum += start * end;\n  }\n  return sum;\n}",
   "createdAt": "2026-10-31",
-  "source": "ollama/qwen3:14b"
+  "source": "ollama/qwen3:14b",
+  "judge": {
+    "difficulty": "easy",
+    "algorithm": "각 구간의 시작과 끝 값을 곱하여 누적 합을 계산",
+    "reason": "단순한 반복문과 기본 연산으로 해결 가능하며, 모든 구간에 대해 일관된 처리가 가능하다."
+  }
 }
