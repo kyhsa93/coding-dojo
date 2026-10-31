@@ -284,7 +284,8 @@
   "source": "ollama/qwen3:14b",
   "judge": {
     "difficulty": "easy",
-    "algorithm": "각 구간의 시작과 끝 값을 곱하여 누적 합을 계산",
-    "reason": "단순한 반복문과 기본 연산으로 해결 가능하며, 모든 구간에 대해 일관된 처리가 가능하다."
+    "algorithm": "각 구간의 시작과 끝 값을 곱하여 누적 합 계산",
+    "reason": "단순한 반복문과 기본 연산으로 해결 가능하며, 모든 구간에 대해 일관된 처리가 가능하다.",
+    "crossChecked": true
   }
 }
