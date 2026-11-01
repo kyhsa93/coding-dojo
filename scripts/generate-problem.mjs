@@ -190,6 +190,14 @@ export function buildProblem(candidate, { existingIds, source }) {
   const params = Array.isArray(c.params) ? c.params : [];
 
   const normalizeInput = (item) => (Array.isArray(item?.input) ? item.input : Array.isArray(item) ? item : null);
+  // A solution that returns undefined (stored as null) for some input has not decided that case; such a
+  // problem fails the brute-force oracle and confuses solvers. Only a declared nullable return may be null.
+  const nullable = /\b(null|undefined|void)\b/.test(String(c.returnType ?? ""));
+  const expectedFor = (input) => {
+    const expected = runCase(fn, input);
+    if (expected === null && !nullable) throw new Error(`solution returns undefined/null for input ${JSON.stringify(input).slice(0, 80)} (returnType ${c.returnType}): state that case in the statement and handle it in the solution`);
+    return expected;
+  };
 
   const seen = new Set();
   const tests = [];
@@ -200,7 +208,7 @@ export function buildProblem(candidate, { existingIds, source }) {
     const key = JSON.stringify(input);
     if (seen.has(key)) continue;
     seen.add(key);
-    tests.push({ input, expected: runCase(fn, input) });
+    tests.push({ input, expected: expectedFor(input) });
   }
   if (tests.length < MIN_TESTS) throw new Error(`only ${tests.length} distinct tests (need ${MIN_TESTS})`);
 
@@ -210,7 +218,7 @@ export function buildProblem(candidate, { existingIds, source }) {
   const examples = c.examples.slice(0, 3).map((raw) => {
     const input = normalizeInput(raw);
     if (!input || input.length !== params.length) throw new Error("example input malformed");
-    const ex = { input, expected: runCase(fn, input) };
+    const ex = { input, expected: expectedFor(input) };
     if (typeof raw?.explanation === "string" && raw.explanation.trim()) ex.explanation = raw.explanation.trim();
     return ex;
   });
@@ -251,12 +259,13 @@ export async function crossVerify(problem, log = () => {}) {
     ensureBudget("cross-check");
     const raw = await callOllama(buildCrossSolvePrompt(problem), { temperature, top_p: 0.9, num_predict: 4096 });
     const result = crossCheck(problem, parseCrossSolution(extractJson(raw)));
+    const timeouts = result.timeouts ? `, ${result.timeouts} timed out and were ignored` : "";
     if (result.ok) {
-      log(`  cross-check: independent solution agrees on ${total} inputs`);
+      log(`  cross-check: independent solution agrees on ${result.agreements}/${total} inputs${timeouts}`);
       return;
     }
     last = result;
-    log(`  cross-check: ${result.failures.length}/${total} inputs disagree (temperature ${temperature})`);
+    log(`  cross-check: ${result.failures.length}/${total} inputs disagree${timeouts} (temperature ${temperature})`);
   }
   throw new Error(`cross-check: an independent solution written from the statement disagrees with the reference solution. ${last.failures[0]}. Either the statement is ambiguous or the solution does not implement it`);
 }

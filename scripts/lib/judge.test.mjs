@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildJudgePrompt, parseJudgement, reconcileDifficulty } from "./judge.mjs";
+import { buildJudgePrompt, crossCheck, parseJudgement, reconcileDifficulty } from "./judge.mjs";
 import { HARD_ARCHETYPES, archetypesForTopic, findArchetype, pickArchetype, servesTopic } from "./archetypes.mjs";
 
 const problem = {
@@ -73,4 +73,22 @@ test("pickArchetype prefers the topic and skips used keys, then falls back", () 
   const fallback = pickArchetype("no-such-topic", [], () => 0.5);
   assert.ok(findArchetype(fallback.key));
   assert.equal(servesTopic(fallback, "no-such-topic"), false);
+});
+
+test("crossCheck ignores inputs where the independent solution times out but needs 6 agreements", () => {
+  const problem = {
+    functionName: "twice", examples: [{ input: [1], expected: 2 }],
+    tests: [2, 3, 4, 5, 6, 7].map((n) => ({ input: [n], expected: n * 2 })).concat([{ input: [10 ** 9], expected: 2 * 10 ** 9 }]),
+  };
+  const naive = "function twice(n) { if (n > 1000) { while (true) {} } return n * 2; }";
+  const r = crossCheck(problem, naive);
+  assert.equal(r.ok, true, r.failures.join("; "));
+  assert.equal(r.timeouts, 1);
+  assert.equal(r.agreements, 7);
+  const tooFew = crossCheck({ ...problem, tests: problem.tests.slice(0, 2) }, naive);
+  assert.equal(tooFew.ok, false);
+  assert.match(tooFew.failures[0], /finished only 3 input/);
+  const wrong = crossCheck(problem, "function twice(n) { return n + n + (n === 3 ? 1 : 0); }");
+  assert.equal(wrong.ok, false);
+  assert.match(wrong.failures[0], /input \[3\]/);
 });

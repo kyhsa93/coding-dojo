@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       count:
-        description: "병렬 슬롯 수 (슬롯마다 문제 최대 1개, 최대 8)"
+        description: "병렬 슬롯 수 (슬롯마다 문제 최대 1개, 최대 8). 예약 실행은 3"
         type: number
         default: 1
       topic:
@@ -28,10 +28,10 @@ on:
         type: string
         default: ""
       runner:
-        description: "러너 (ARM 은 공개 저장소에서 무료. 속도 비교용)"
+        description: "러너. ARM 이 x64 보다 생성이 약 30% 빠르다(3.5 vs 2.7 tok/s, 2026-11-01 측정). 둘 다 공개 저장소에서 무료"
         type: choice
-        options: ["ubuntu-latest", "ubuntu-24.04-arm"]
-        default: "ubuntu-latest"
+        options: ["ubuntu-24.04-arm", "ubuntu-latest"]
+        default: "ubuntu-24.04-arm"
       rejudge:
         description: "재판정할 문제 id (쉼표 구분, all = 생성된 문제 전부). 지정하면 생성 대신 재판정만 한다"
         type: string
@@ -52,7 +52,7 @@ concurrency:
 env:
   OLLAMA_MODEL: qwen3:14b
   OLLAMA_THINK: "false"
-  COUNT: ${{ inputs.count || 1 }}
+  COUNT: ${{ inputs.count || 3 }}
   TOPIC: ${{ inputs.topic }}
   DIFFICULTY: ${{ inputs.difficulty }}
   REJUDGE: ${{ inputs.rejudge }}
@@ -82,7 +82,7 @@ jobs:
 
   generate:
     needs: plan
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04-arm' }}
     timeout-minutes: 90
     # 슬롯 하나가 실패해도(문제 0개) 나머지 슬롯과 수집은 계속된다. 전체 결과는 collect 가 정한다.
     continue-on-error: true
