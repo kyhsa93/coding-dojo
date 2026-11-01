@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildProblem } from "../generate-problem.mjs";
+import { buildImplPrompt, buildProblem, buildPrompt, buildSpec, buildSpecPrompt } from "../generate-problem.mjs";
+import { findArchetype } from "./archetypes.mjs";
+import { findDomain } from "./domains.mjs";
 
 const base = {
   id: "sum-or-nothing", title: "합", difficulty: "easy", tags: ["array"],
@@ -44,9 +46,6 @@ test("a type-annotated solution is stripped to plain JavaScript", () => {
   const broken = { ...base, solution: "function sum(nums) { return ( ; }" };
   assert.throws(() => buildProblem(broken, { existingIds: new Set(), source: "test" }), SyntaxError);
 });
-
-import { buildImplPrompt, buildSpec, buildSpecPrompt } from "../generate-problem.mjs";
-import { findArchetype } from "./archetypes.mjs";
 
 const specCandidate = {
   id: "longest-increasing-run", title: "가장 긴 증가 구간", difficulty: "hard", tags: ["dynamic-programming"],
@@ -100,4 +99,19 @@ test("spec prompt shows positional example inputs for a two-parameter signature"
   const p = buildSpecPrompt({ topic: "array", difficulty: "hard", existing: [], feedback: null, archetype: findArchetype("binary-search-answer") });
   assert.match(p, /never an object keyed by parameter names/);
   assert.match(p, /"input": \[\[1,2,3\], 2\]/);
+});
+
+test("the generation prompt carries the setting when one is given", () => {
+  const args = { topic: "heap", difficulty: "medium", existing: [], feedback: null, archetype: null };
+  assert.doesNotMatch(buildPrompt(args), /Setting:/);
+  const p = buildPrompt({ ...args, domain: findDomain("aws") });
+  assert.match(p, /Setting: AWS cloud infrastructure/);
+  assert.match(p, /Include "aws" in "tags"/);
+  assert.match(p, /Topic: heap/);
+});
+
+test("the spec prompt carries the setting too", () => {
+  const p = buildSpecPrompt({ topic: "graph-bfs", difficulty: "hard", existing: [], feedback: null, archetype: findArchetype("graph-dijkstra-state"), domain: findDomain("containers") });
+  assert.match(p, /Setting: containers and orchestration/);
+  assert.match(p, /Include "containers" in "tags"/);
 });
