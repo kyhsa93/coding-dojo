@@ -16,6 +16,7 @@ Rules:
 - A JavaScript (ES2022, no TypeScript, no imports, no console.log) function named "bruteForce" with exactly these parameters: ${signatureOf(problem).replace(problem.functionName, "bruteForce")}
 - Approach: ${archetype.brute}. No memoization, no pruning, no clever data structures. Being slow is the point: it is only run on small inputs, and it must NOT finish a large input within ${BRUTE_TIMEOUT_MS}ms.
 - It must return exactly the same values as a correct solution for every valid input, including the edge cases (empty input, single element, ties and tie-breaking rules). Follow the statement literally.
+- Handle the empty input explicitly and return what the reference solution returns for it. Math.max()/Math.min() with no arguments give -Infinity/Infinity, which is wrong.
 - Recursion depth must stay below ~5000 frames; use loops where the input can be large.
 
 Statement:

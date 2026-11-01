@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkBruteForce, checkLargeInput, runPerfGate } from "./perf-gate.mjs";
+import { checkBruteForce, checkLargeInput, runPerfGate, show } from "./perf-gate.mjs";
 import { loadSolution, runCase } from "./problem-utils.mjs";
 
 // Longest increasing subsequence: O(n log n) reference, O(n^2) brute force.
@@ -93,4 +93,18 @@ test("checkBruteForce rejects a source that does not load", () => {
   const r = checkBruteForce(problemWith(smallInputs), "function bruteForce(nums) { return ( ; }");
   assert.equal(r.ok, false);
   assert.match(r.failures[0], /does not load/);
+});
+
+test("a non-finite brute force value is named, not printed as null", () => {
+  // Correct O(n^2) LIS except that Math.max() of an empty dp is -Infinity.
+  const brute = `function bruteForce(nums) {
+    const dp = nums.map(() => 1);
+    for (let i = 0; i < nums.length; i++) for (let j = 0; j < i; j++) if (nums[j] < nums[i]) dp[i] = Math.max(dp[i], dp[j] + 1);
+    return Math.max(...dp);
+  }`;
+  const result = checkBruteForce(problemWith(smallInputs), brute);
+  assert.equal(result.ok, false);
+  assert.match(result.failures[0], /bruteForce -Infinity \(Math\.max\(\)/);
+  assert.doesNotMatch(result.failures[0], /null/);
+  assert.equal(show([1, -Infinity, NaN]), '[1,"-Infinity","NaN"]');
 });

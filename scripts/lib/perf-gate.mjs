@@ -25,6 +25,14 @@ const MIN_AGREEMENTS = 6;
 
 const isTimeout = (e) => /timed out|ERR_SCRIPT_EXECUTION_TIMEOUT/i.test(String(e?.message ?? e));
 
+/** JSON.stringify prints ±Infinity and NaN as null, which hides the usual empty-input bug from the model. */
+export function show(v) {
+  if (typeof v === "number" && !Number.isFinite(v)) return String(v);
+  return JSON.stringify(v, (_k, x) => (typeof x === "number" && !Number.isFinite(x) ? String(x) : x));
+}
+
+const nonFiniteHint = (v) => (typeof v === "number" && !Number.isFinite(v) ? " (Math.max()/Math.min() with no arguments give -Infinity/Infinity; handle the empty case explicitly)" : "");
+
 function summarizeArg(v) {
   if (Array.isArray(v)) return `array[${v.length}]`;
   if (typeof v === "string") return `string[${v.length}]`;
@@ -63,7 +71,7 @@ export function checkBruteForce(problem, bruteForce) {
       return { ok: false, failures: [`bruteForce threw on input ${JSON.stringify(t.input).slice(0, 120)}: ${e.message}`] };
     }
     if (!deepEqual(got, t.expected)) {
-      return { ok: false, failures: [`bruteForce disagrees with the solution on input ${JSON.stringify(t.input).slice(0, 120)}: solution ${JSON.stringify(t.expected)}, bruteForce ${JSON.stringify(got)}. One of them does not follow the statement`] };
+      return { ok: false, failures: [`bruteForce disagrees with the solution on input ${show(t.input).slice(0, 120)}: solution ${show(t.expected)}, bruteForce ${show(got)}${nonFiniteHint(got)}. One of them does not follow the statement`] };
     }
     agreements++;
   }

@@ -52,6 +52,9 @@ jobs:
       REJUDGE: ${{ inputs.rejudge }}
       MAX_ATTEMPTS: ${{ inputs.max_attempts || 4 }}
       ARCHETYPE: ${{ inputs.archetype }}
+      # 새 시도·단계 호출은 이 시간 안에서만 시작한다. 한 호출은 최대 OLLAMA_CALL_TIMEOUT_MS(기본 20분)이므로
+      # 60 + 20 분 뒤에는 생성이 끝나고, 그때까지 만든 문제는 timeout-minutes 안에서 검증·커밋된다.
+      GENERATION_BUDGET_MINUTES: "60"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
