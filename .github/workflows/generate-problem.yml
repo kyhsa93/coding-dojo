@@ -31,9 +31,14 @@ on:
         description: "재판정할 문제 id (쉼표 구분, all = 생성된 문제 전부). 지정하면 생성 대신 재판정만 한다"
         type: string
         default: ""
+      audit:
+        description: "지문 검수만 할 문제 id (쉼표 구분). 지정하면 생성·커밋 없이 검수 보고서만 잡 요약에 남긴다"
+        type: string
+        default: ""
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: generate-problem
@@ -52,6 +57,7 @@ jobs:
       REJUDGE: ${{ inputs.rejudge }}
       MAX_ATTEMPTS: ${{ inputs.max_attempts || 4 }}
       ARCHETYPE: ${{ inputs.archetype }}
+      AUDIT: ${{ inputs.audit }}
       # 새 시도·단계 호출은 이 시간 안에서만 시작한다. 한 호출은 최대 OLLAMA_CALL_TIMEOUT_MS(기본 20분)이므로
       # 60 + 20 분 뒤에는 생성이 끝나고, 그때까지 만든 문제는 timeout-minutes 안에서 검증·커밋된다.
       GENERATION_BUDGET_MINUTES: "60"
@@ -88,11 +94,11 @@ jobs:
           ollama pull "$OLLAMA_MODEL"
 
       - name: 문제 생성
-        if: env.REJUDGE == ''
+        if: env.REJUDGE == '' && env.AUDIT == ''
         run: node scripts/generate-problem.mjs
 
       - name: 난이도 재판정
-        if: env.REJUDGE != ''
+        if: env.REJUDGE != '' && env.AUDIT == ''
         run: |
           if [ "$REJUDGE" = "all" ]; then
             node scripts/judge-problems.mjs
@@ -101,21 +107,67 @@ jobs:
           fi
 
       - name: 전체 문제 검증
-        run: node scripts/validate-problems.mjs
+        run: npm test
 
-      - name: 커밋 및 푸시
+      # 검수: 게이트를 전부 통과한 문제라도 지문이 풀이의 규칙(방향, 경계, 동점 처리 등)을 다 말하지는
+      # 않는다. 모델이 지문과 풀이·테스트를 대조해 빠진 규칙을 적고, 보고서는 PR 본문과 잡 요약에 들어간다.
+      - name: 변경된 문제 목록
+        id: changed
+        run: |
+          if [ -n "$AUDIT" ]; then
+            ids=$(echo "$AUDIT" | tr ',' ' ')
+          else
+            ids=$(git status --porcelain problems | awk '{print $2}' | sed 's#problems/##; s#\.json##' | tr '\n' ' ')
+          fi
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          echo "변경된 문제: ${ids:-없음}"
+
+      - name: 지문 검수
+        if: steps.changed.outputs.ids != ''
+        env:
+          AUDIT_OUT: ${{ runner.temp }}/audit-report.md
+        run: |
+          node scripts/audit-problems.mjs ${{ steps.changed.outputs.ids }}
+          { echo "## 지문 검수"; echo; cat "$AUDIT_OUT"; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: PR 생성
+        if: env.AUDIT == '' && steps.changed.outputs.ids != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT_OUT: ${{ runner.temp }}/audit-report.md
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="problems/run-${{ github.run_id }}"
+          git checkout -b "$branch"
           git add problems
-          if git diff --cached --quiet; then
-            echo "추가된 문제 없음"
-            exit 0
-          fi
           added=$(git diff --cached --name-only --diff-filter=A | sed 's#problems/##; s#\.json##' | tr '\n' ' ')
           if [ -n "$added" ]; then
-            git commit -m "feat(problems): 문제 추가 ${added}"
+            title="feat(problems): 문제 추가 ${added}"
           else
-            git commit -m "chore(problems): 난이도 재판정"
+            title="chore(problems): 난이도 재판정"
           fi
-          git push origin HEAD:main
+          git commit -m "$title"
+          git push origin "$branch"
+          {
+            echo "## 문제"
+            echo
+            echo "| id | 제목 | 난이도 | 아키타입 | 판정 의견 | 테스트 |"
+            echo "|---|---|---|---|---|---|"
+            for id in ${{ steps.changed.outputs.ids }}; do
+              node -e '
+                const p = JSON.parse(require("fs").readFileSync(`problems/${process.argv[1]}.json`, "utf-8"));
+                const j = p.judge ?? {};
+                console.log(`| ${p.id} | ${p.title} | ${p.difficulty} | ${j.archetype ?? "-"} | ${j.opinion ?? j.difficulty ?? "-"} | ${p.tests.length} |`);
+              ' "$id"
+            done
+            echo
+            echo "## 지문 검수"
+            echo
+            cat "$AUDIT_OUT"
+            echo
+            echo "실행: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo
+            echo "자동 생성 PR 이라 CI 워크플로우는 돌지 않는다. 검증(npm test)은 이 실행 안에서 통과했다. 병합하면 Pages 배포가 이어서 돈다."
+          } > "$RUNNER_TEMP/pr-body.md"
+          gh pr create --base main --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md"
