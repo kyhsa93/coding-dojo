@@ -18,7 +18,7 @@
  */
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { DIFFICULTIES, LANGUAGES, loadSolution, runCase, starterFor, validateShape, verifySolution } from "./lib/problem-utils.mjs";
+import { DIFFICULTIES, LANGUAGES, loadSolution, runCase, starterFor, toPlainJs, validateShape, verifySolution } from "./lib/problem-utils.mjs";
 import { MODEL, callOllama, extractJson } from "./lib/ollama.mjs";
 import { buildCrossSolvePrompt, buildJudgePrompt, crossCheck, parseCrossSolution, parseJudgement, reconcileDifficulty } from "./lib/judge.mjs";
 import { findArchetype, pickArchetype, servesTopic } from "./lib/archetypes.mjs";
@@ -186,10 +186,24 @@ export function buildProblem(candidate, { existingIds, source }) {
   if (!DIFFICULTIES.includes(c.difficulty)) throw new Error(`bad difficulty ${c.difficulty}`);
   if (typeof c.id !== "string" || existingIds.has(c.id)) throw new Error(`id missing or duplicate: ${c.id}`);
 
-  const fn = loadSolution(c.solution, c.functionName);
+  const solution = toPlainJs(c.solution);
+  const fn = loadSolution(solution, c.functionName);
   const params = Array.isArray(c.params) ? c.params : [];
 
-  const normalizeInput = (item) => (Array.isArray(item?.input) ? item.input : Array.isArray(item) ? item : null);
+  // A test is an argument list. For a one-parameter function the model often writes the bare argument
+  // instead ("tests": [5, 7] or [[1, 2, 3], [4]] for nums: number[]); that is unambiguous, so accept it.
+  const single = params.length === 1;
+  const singleIsArray = single && /\[\]$/.test(String(params[0].type ?? ""));
+  const normalizeInput = (item) => {
+    const raw = item && typeof item === "object" && !Array.isArray(item) && "input" in item ? item.input : item;
+    if (Array.isArray(raw)) {
+      if (raw.length === params.length && !(singleIsArray && raw.length === 1 && !Array.isArray(raw[0]))) return raw;
+      if (singleIsArray) return [raw];
+      return raw;
+    }
+    if (single && raw !== undefined && raw !== null && !singleIsArray) return [raw];
+    return null;
+  };
   // A solution that returns undefined (stored as null) for some input has not decided that case; such a
   // problem fails the brute-force oracle and confuses solvers. Only a declared nullable return may be null.
   const nullable = /\b(null|undefined|void)\b/.test(String(c.returnType ?? ""));
@@ -237,7 +251,7 @@ export function buildProblem(candidate, { existingIds, source }) {
     examples,
     tests,
     hints: Array.isArray(c.hints) ? c.hints.map(String).filter(Boolean).slice(0, 4) : [],
-    solution: c.solution.trim(),
+    solution: solution.trim(),
     createdAt: new Date().toISOString().slice(0, 10),
     source,
   };

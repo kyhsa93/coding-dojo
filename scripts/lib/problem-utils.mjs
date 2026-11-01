@@ -1,4 +1,5 @@
 import vm from "node:vm";
+import { transform } from "sucrase";
 
 export const LANGUAGES = ["javascript", "typescript", "python"];
 export const DIFFICULTIES = ["easy", "medium", "hard"];
@@ -52,10 +53,32 @@ export function toJson(v) {
   return String(v);
 }
 
-/** Loads a JavaScript solution inside an isolated context and returns a callable. */
+/**
+ * The model is told "no TypeScript" and still writes `function f(nums: number[]): number` now and then.
+ * Returns plain JavaScript: the source itself when it parses, otherwise its TypeScript-stripped form
+ * (sucrase, the same transform the browser judge uses), or throws the original syntax error.
+ */
+export function toPlainJs(code) {
+  try {
+    new vm.Script(code);
+    return code;
+  } catch (e) {
+    if (!(e instanceof SyntaxError)) throw e;
+    let stripped;
+    try {
+      stripped = transform(code, { transforms: ["typescript"] }).code;
+    } catch {
+      throw e;
+    }
+    new vm.Script(stripped); // throws the stripped form's syntax error if it is still broken
+    return stripped;
+  }
+}
+
+/** Loads a JavaScript (or type-annotated) solution inside an isolated context and returns a callable. */
 export function loadSolution(code, functionName) {
   const context = vm.createContext({ console: { log() {}, error() {}, warn() {} } });
-  const src = `${code}\n;(typeof ${functionName} === "function" ? ${functionName} : undefined)`;
+  const src = `${toPlainJs(code)}\n;(typeof ${functionName} === "function" ? ${functionName} : undefined)`;
   const fn = vm.runInContext(src, context, { timeout: 2000 });
   if (typeof fn !== "function") throw new Error(`solution does not define function ${functionName}`);
   return fn;
