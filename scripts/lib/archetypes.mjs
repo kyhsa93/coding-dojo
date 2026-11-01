@@ -234,7 +234,7 @@ export const HARD_ARCHETYPES = [
     key: "string-regex-dp",
     topics: ["string", "dynamic-programming", "parsing"],
     technique: "regular-expression or wildcard matching with '.' and '*' (or '?' and '*') via dp[i][j] over the text and pattern",
-    large: "a text of length 1500 and a pattern of length 300 with many '*' from a seeded generator over 2 letters",
+    large: "a text of 1500 'a's and a pattern of 300 'a*' pairs followed by one 'b' (no match, exponential backtracking); the statement's constraints must allow these lengths",
     brute: "recursive backtracking without memoization (exponential)",
   },
   {

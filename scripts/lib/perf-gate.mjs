@@ -111,7 +111,7 @@ export function checkLargeInput(problem, brute, largeInput) {
     runCase(brute, input, BRUTE_TIMEOUT_MS);
     const ms = Math.round(performance.now() - t1);
     evidence.bruteForce = `${ms}ms`;
-    return { ok: false, failures: [`bruteForce finished the large input (${evidence.largeInputArgs.join(", ")}) in ${ms}ms (limit ${BRUTE_TIMEOUT_MS}ms): the input is too small to need the technique. Build a much bigger input, as close to the stated upper constraint as possible`], evidence };
+    return { ok: false, failures: [`bruteForce finished the large input (${evidence.largeInputArgs.join(", ")}) in ${ms}ms (limit ${BRUTE_TIMEOUT_MS}ms): the input is too small or too easy to need the technique. Build an input as close to the stated upper constraint as possible AND shaped as the worst case for the brute force`], evidence };
   } catch (e) {
     if (!isTimeout(e)) {
       return { ok: false, failures: [`bruteForce threw on the large input instead of being slow: ${e.message}`], evidence };

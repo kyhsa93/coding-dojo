@@ -123,27 +123,40 @@ export function parseCrossSolution(candidate) {
 
 /**
  * Runs an independent solution on every example and test input and compares it with the stored expected values.
- * Returns {ok, failures: string[]}; a failure names the input and both outputs so the next attempt can be told.
+ * The independent solution checks the statement's semantics, not performance: inputs on which it times out
+ * (a naive solution on a hard problem's large test) are ignored, but it must agree on at least
+ * MIN_CROSS_AGREEMENTS inputs. Returns {ok, failures, agreements, timeouts}; a failure names the input and
+ * both outputs so the next attempt can be told.
  */
+export const MIN_CROSS_AGREEMENTS = 6;
+
 export function crossCheck(problem, altSolution) {
   const failures = [];
+  let agreements = 0;
+  let timeouts = 0;
   let fn;
   try {
     fn = loadSolution(altSolution, problem.functionName);
   } catch (e) {
-    return { ok: false, failures: [`independent solution does not load: ${e.message}`] };
+    return { ok: false, failures: [`independent solution does not load: ${e.message}`], agreements, timeouts };
   }
   for (const t of [...problem.examples, ...problem.tests]) {
     let got;
     try {
       got = runCase(fn, t.input);
     } catch (e) {
-      failures.push(`input ${JSON.stringify(t.input)}: independent solution threw ${e.message}`);
+      if (/timed out|ERR_SCRIPT_EXECUTION_TIMEOUT/i.test(String(e.message))) {
+        timeouts++;
+        continue;
+      }
+      failures.push(`input ${JSON.stringify(t.input).slice(0, 120)}: independent solution threw ${e.message}`);
       continue;
     }
-    if (!deepEqual(got, t.expected)) {
-      failures.push(`input ${JSON.stringify(t.input)}: reference solution returns ${JSON.stringify(t.expected)}, independent solution returns ${JSON.stringify(got)}`);
-    }
+    if (deepEqual(got, t.expected)) agreements++;
+    else failures.push(`input ${JSON.stringify(t.input).slice(0, 120)}: reference solution returns ${JSON.stringify(t.expected)}, independent solution returns ${JSON.stringify(got)}`);
   }
-  return { ok: failures.length === 0, failures };
+  if (failures.length === 0 && agreements < MIN_CROSS_AGREEMENTS) {
+    failures.push(`independent solution finished only ${agreements} input(s) within the time limit (need ${MIN_CROSS_AGREEMENTS}); the small tests must be small enough for a naive solution`);
+  }
+  return { ok: failures.length === 0, failures, agreements, timeouts };
 }

@@ -9,6 +9,24 @@ const signatureOf = (problem) => `${problem.functionName}(${problem.params.map((
 
 const feedbackBlock = (feedback) => (feedback ? `\nYour previous answer was rejected: ${feedback}\nFix that.\n` : "");
 
+const MAX_ANCHORS = 4;
+
+/** The smallest tests with their expected values: concrete anchors for the edge cases the statement glosses over. */
+export function anchorTests(problem) {
+  const seen = new Set();
+  return [...problem.examples, ...problem.tests]
+    .filter((t) => {
+      const k = JSON.stringify(t.input);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .sort((a, b) => JSON.stringify(a.input).length - JSON.stringify(b.input).length)
+    .slice(0, MAX_ANCHORS);
+}
+
+const anchorBlock = (problem) => anchorTests(problem).map((t) => `  ${JSON.stringify(t.input)} -> ${JSON.stringify(t.expected)}`).join("\n");
+
 export function buildBruteForcePrompt(problem, archetype, feedback) {
   return `Write the most obvious SLOW solution (a brute force) for this coding problem. Output ONLY a compact JSON object on a single line, no prose, no markdown fences.
 ${feedbackBlock(feedback)}
@@ -17,6 +35,8 @@ Rules:
 - Approach: ${archetype.brute}. No memoization, no pruning, no clever data structures. Being slow is the point: it is only run on small inputs, and it must NOT finish a large input within ${BRUTE_TIMEOUT_MS}ms.
 - It must return exactly the same values as a correct solution for every valid input, including the edge cases (empty input, single element, ties and tie-breaking rules). Follow the statement literally.
 - Handle the empty input explicitly and return what the reference solution returns for it. Math.max()/Math.min() with no arguments give -Infinity/Infinity, which is wrong.
+- It must return exactly these values (arguments -> result, from the reference solution); they settle the edge cases:
+${anchorBlock(problem)}
 - Recursion depth must stay below ~5000 frames; use loops where the input can be large.
 
 Statement:
@@ -38,6 +58,7 @@ Rules:
 - Deterministic: use a seeded generator such as \`let s = 12345; const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;\`. Never use Math.random or Date.
 - Every value must satisfy the statement's constraints (ranges, uniqueness, validity of graphs/orders), so the input is legal.
 - A correct O(n log n)-class solution must finish it within ${SOLUTION_MAX_MS}ms; a naive brute force (${archetype.brute}) must not finish within ${BRUTE_TIMEOUT_MS}ms. Prefer the largest legal size.
+- Size alone is not the goal: shape the input as the WORST case for that brute force (a pattern with many '*' against a text that almost matches, all-equal characters, deep chains, many overlapping intervals). A random input that the brute force handles quickly is rejected even when it is big.
 - ES2022, no imports, no console.log. Avoid recursion.
 
 Statement:

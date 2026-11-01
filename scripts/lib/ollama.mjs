@@ -115,6 +115,7 @@ export function extractJson(text) {
     // Show where the model's output broke so a recurring pattern can be fixed in the prompt.
     const pos = Number(/position (\d+)/.exec(e.message)?.[1] ?? -1);
     const around = pos >= 0 ? slice.slice(Math.max(0, pos - 160), pos + 80) : slice.slice(0, 240);
-    throw new Error(`${e.message}\n    near: ${JSON.stringify(around)}`);
+    const tail = body.trimEnd().slice(-160);
+    throw new Error(`${e.message}\n    near: ${JSON.stringify(around)}\n    output ends with: ${JSON.stringify(tail)} (${body.length} chars)`);
   }
 }
