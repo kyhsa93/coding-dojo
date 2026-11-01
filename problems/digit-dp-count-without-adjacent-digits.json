@@ -1,0 +1,187 @@
+{
+  "id": "digit-dp-count-without-adjacent-digits",
+  "title": "연속된 숫자가 없는 수의 개수 세기",
+  "difficulty": "hard",
+  "tags": [
+    "dynamic-programming"
+  ],
+  "statement": "양의 정수 N이 주어졌을 때, [0, N] 범위 내에서 두 개의 연속된 숫자(예: 12, 23, 34 등)가 포함되지 않은 수의 개수를 계산하세요. 예를 들어, 123은 12, 23이라는 연속된 숫자가 포함되어 있으므로 제외됩니다. N은 최대 10^12까지 될 수 있습니다. 이 문제는 단순히 모든 수를 순회하며 조건을 확인하는 방법은 너무 느려서, 디지트 DP 기법을 사용해야 합니다.",
+  "functionName": "countNumbersWithoutAdjacentDigits",
+  "params": [
+    {
+      "name": "n",
+      "type": "number"
+    }
+  ],
+  "returnType": "number",
+  "starterCode": {
+    "javascript": "function countNumbersWithoutAdjacentDigits(n) {\n  // 여기에 코드를 작성하세요\n}\n",
+    "typescript": "function countNumbersWithoutAdjacentDigits(n: number): number {\n  // 여기에 코드를 작성하세요\n}\n",
+    "python": "def countNumbersWithoutAdjacentDigits(n: int) -> int:\n    # 여기에 코드를 작성하세요\n    pass\n"
+  },
+  "examples": [
+    {
+      "input": [
+        123
+      ],
+      "expected": 91,
+      "explanation": "123 이하의 수 중 12, 23, 34 등이 포함되지 않은 수의 개수를 계산합니다."
+    },
+    {
+      "input": [
+        20
+      ],
+      "expected": 19,
+      "explanation": "20 이하의 수 중 12, 23 등이 포함되지 않은 수의 개수를 계산합니다."
+    },
+    {
+      "input": [
+        0
+      ],
+      "expected": 1,
+      "explanation": "0은 연속된 숫자가 없으므로 포함됩니다."
+    }
+  ],
+  "tests": [
+    {
+      "input": [
+        1000000000000
+      ],
+      "expected": 116999827298
+    },
+    {
+      "input": [
+        0
+      ],
+      "expected": 1
+    },
+    {
+      "input": [
+        12
+      ],
+      "expected": 11
+    },
+    {
+      "input": [
+        23
+      ],
+      "expected": 20
+    },
+    {
+      "input": [
+        999
+      ],
+      "expected": 683
+    },
+    {
+      "input": [
+        10
+      ],
+      "expected": 10
+    },
+    {
+      "input": [
+        5
+      ],
+      "expected": 6
+    },
+    {
+      "input": [
+        100000000000
+      ],
+      "expected": 14233783750
+    },
+    {
+      "input": [
+        123456789012
+      ],
+      "expected": 15587229928
+    },
+    {
+      "input": [
+        11
+      ],
+      "expected": 11
+    },
+    {
+      "input": [
+        22
+      ],
+      "expected": 20
+    },
+    {
+      "input": [
+        33
+      ],
+      "expected": 29
+    },
+    {
+      "input": [
+        44
+      ],
+      "expected": 38
+    },
+    {
+      "input": [
+        55
+      ],
+      "expected": 47
+    },
+    {
+      "input": [
+        66
+      ],
+      "expected": 56
+    },
+    {
+      "input": [
+        77
+      ],
+      "expected": 65
+    },
+    {
+      "input": [
+        88
+      ],
+      "expected": 74
+    },
+    {
+      "input": [
+        99
+      ],
+      "expected": 83
+    },
+    {
+      "input": [
+        655154048466
+      ],
+      "expected": 77591309134
+    }
+  ],
+  "hints": [
+    "디지트 DP 기법을 사용하세요.",
+    "각 자릿수에서 이전 자릿수와의 관계를 상태로 저장해야 합니다.",
+    "연속된 숫자가 존재하는 경우를 제외해야 합니다."
+  ],
+  "solution": "function countNumbersWithoutAdjacentDigits(n) { if (n < 0) return 0; let s = n.toString(); let memo = new Map(); function dp(pos, tight, prev, leadingZero) { if (pos === s.length) return 1; let key = [pos, tight, prev, leadingZero].join(','); if (memo.has(key)) return memo.get(key); let limit = tight ? parseInt(s[pos]) : 9; let res = 0; for (let d = 0; d <= limit; d++) { let newTight = tight && (d === limit); let newLeadingZero = leadingZero && (d === 0); let newPrev = prev; if (!newLeadingZero) newPrev = d; if (prev !== undefined && Math.abs(d - prev) === 1) continue; res += dp(pos + 1, newTight, newPrev, newLeadingZero); } memo.set(key, res); return res; } return dp(0, true, undefined, true); }",
+  "createdAt": "2026-11-01",
+  "source": "ollama/qwen3:14b",
+  "judge": {
+    "archetype": "dp-digit",
+    "performance": {
+      "solutionMs": 1,
+      "bruteForce": "timeout>2000ms",
+      "largeInputArgs": [
+        "655154048466"
+      ],
+      "includedAsTest": true,
+      "largeInput": "function largeInput() { let s = 12345; const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648; let n = Math.floor(rnd() * 1e12) + 1; return [n]; }"
+    },
+    "difficulty": "hard",
+    "algorithm": "디지트 DP를 사용하여 연속된 숫자가 없는 수의 개수를 계산",
+    "reason": "DP 상태가 pos, tight, prev, leadingZero로 구성되어 있으며, 직접적인 시뮬레이션이 불가능한 대규모 입력을 처리하기 위해 DP 기법이 필요함",
+    "usesTechnique": true,
+    "opinion": "medium",
+    "crossChecked": true
+  }
+}
