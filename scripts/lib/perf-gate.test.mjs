@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runPerfGate } from "./perf-gate.mjs";
+import { checkBruteForce, checkLargeInput, runPerfGate } from "./perf-gate.mjs";
 import { loadSolution, runCase } from "./problem-utils.mjs";
 
 // Longest increasing subsequence: O(n log n) reference, O(n^2) brute force.
@@ -74,4 +74,23 @@ test("rejects when the brute force cannot finish enough small tests", () => {
   const result = runPerfGate(problemWith([[big], [[1]], [[2, 1]]]), { bruteForce, largeInput: largeInput(200_000) });
   assert.equal(result.ok, false);
   assert.match(result.failures[0], /finished only/);
+});
+
+test("checkBruteForce returns the loaded function and checkLargeInput reuses it", () => {
+  const problem = problemWith(smallInputs);
+  const stage1 = checkBruteForce(problem, bruteForce);
+  assert.equal(stage1.ok, true, stage1.failures.join("; "));
+  assert.equal(typeof stage1.brute, "function");
+  const tooSmall = checkLargeInput(problem, stage1.brute, largeInput(300));
+  assert.equal(tooSmall.ok, false);
+  assert.match(tooSmall.failures[0], /too small/);
+  const ok = checkLargeInput(problem, stage1.brute, largeInput(200_000));
+  assert.equal(ok.ok, true, ok.failures.join("; "));
+  assert.equal(ok.evidence.includedAsTest, false, "200k ints exceed the test-size budget");
+});
+
+test("checkBruteForce rejects a source that does not load", () => {
+  const r = checkBruteForce(problemWith(smallInputs), "function bruteForce(nums) { return ( ; }");
+  assert.equal(r.ok, false);
+  assert.match(r.failures[0], /does not load/);
 });

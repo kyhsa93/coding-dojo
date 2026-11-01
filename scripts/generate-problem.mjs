@@ -20,7 +20,8 @@ import { DIFFICULTIES, LANGUAGES, loadSolution, runCase, starterFor, validateSha
 import { MODEL, callOllama, extractJson } from "./lib/ollama.mjs";
 import { buildCrossSolvePrompt, buildJudgePrompt, crossCheck, parseCrossSolution, parseJudgement, reconcileDifficulty } from "./lib/judge.mjs";
 import { findArchetype, pickArchetype, servesTopic } from "./lib/archetypes.mjs";
-import { BRUTE_TIMEOUT_MS, SOLUTION_MAX_MS, runPerfGate } from "./lib/perf-gate.mjs";
+import { checkBruteForce, checkLargeInput } from "./lib/perf-gate.mjs";
+import { buildBruteForcePrompt, buildLargeInputPrompt, parseFunctionSource } from "./lib/hard-stages.mjs";
 
 const COUNT = Math.max(1, Number(process.env.COUNT ?? 1));
 const MAX_ATTEMPTS = Math.max(1, Number(process.env.MAX_ATTEMPTS ?? 4));
@@ -51,29 +52,23 @@ async function existingProblems() {
 }
 
 /**
- * Hard problems are built from an archetype: the model is told which technique the solution must use
- * and must also hand over a brute force and a large-input builder for the performance gate.
+ * Hard problems are built from an archetype: the model is told which technique the solution must use.
+ * The brute force and the large input for the performance gate are asked for in later, separate calls
+ * (obtainBruteForce / obtainLargeInput) so a failure there retries only that stage.
  */
 function hardBlock(archetype) {
   if (!archetype) return "";
   return `
-Hard problem requirements (an automated gate measures these, a mismatch is rejected):
-- Required technique: ${archetype.technique}. The "solution" MUST implement this technique; a reviewer checks it. Design the problem so a simpler approach is too slow.
-- State constraints in the statement big enough that the technique is needed. Guidance: ${archetype.large}.
-- "bruteForce": a second JavaScript function named "bruteForce" with exactly the same parameters, written in the most obvious slow way (${archetype.brute}). It must return the same values as "solution" on the small tests and must NOT finish the large input within ${BRUTE_TIMEOUT_MS}ms. Keep it simple: loops/recursion, no clever pruning, and no recursion deeper than ~5000 frames.
-- "largeInput": a JavaScript function named "largeInput" with no parameters that builds ONE argument list at the upper constraint and returns it as an array (one element per parameter). It must be deterministic: use a seeded generator like \`let s = 12345; const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;\`, never Math.random or Date. "solution" must finish it within ${SOLUTION_MAX_MS}ms.
-- Keep the regular "tests" small (a few hundred elements at most) so the brute force can finish them.
+Hard problem requirements (a reviewer and an automated performance gate check these; a mismatch is rejected):
+- Required technique: ${archetype.technique}. The "solution" MUST implement this technique. Design the problem so that a naive approach (${archetype.brute}) is far too slow at the stated constraints.
+- State input sizes in the statement big enough that the technique is needed. Guidance for the upper constraint: ${archetype.large}.
+- Keep the regular "tests" small (a few hundred elements at most); a separate large input is generated later.
 `;
 }
 
 function buildPrompt({ topic, difficulty, existing, feedback, archetype }) {
   const avoid = existing.map((p) => `${p.id} (${p.title}${p.algorithm ? `: ${p.algorithm}` : ""})`).join(", ") || "(none)";
   const feedbackBlock = feedback ? `\nYour previous attempt was rejected: ${feedback}\nFix that in this attempt.\n` : "";
-  const extraFields = archetype
-    ? `,
-  "bruteForce": "function bruteForce(nums) { ... }",
-  "largeInput": "function largeInput() { let s = 12345; const rnd = () => ...; return [ ... ]; }"`
-    : "";
   return `You are writing one coding interview problem for a practice site. Output ONLY a compact JSON object on a single line: no prose, no markdown fences, no newlines or indentation between fields.
 ${feedbackBlock}${hardBlock(archetype)}
 Constraints:
@@ -102,24 +97,71 @@ JSON shape (fill every field):
   "examples": [{"input": [[1,2,3]], "explanation": "..."}],
   "tests": [[[1,2,3]], [[]], [[5]]],
   "hints": ["힌트 1", "힌트 2"],
-  "solution": "function camelCaseName(nums) { ... }"${extraFields}
+  "solution": "function camelCaseName(nums) { ... }"
 }`;
 }
 
+/** Model calls per stage before the whole attempt is given up. */
+const STAGE_RETRIES = 3;
+const STAGE_TEMPERATURES = [0.3, 0.7, 0.5];
+
 /**
- * Performance gate for an archetype-built hard problem. Returns the problem with the evidence recorded
- * (and the large input appended as a test when it is small enough) or throws with the reason.
+ * Stage: ask for a brute force until one agrees with the solution on the small tests.
+ * Returns {source, brute} or throws with the last reason.
  */
-export function applyPerfGate(problem, candidate, archetype) {
-  if (typeof candidate.bruteForce !== "string" || !candidate.bruteForce.trim()) throw new Error("perf: bruteForce missing");
-  if (typeof candidate.largeInput !== "string" || !candidate.largeInput.trim()) throw new Error("perf: largeInput missing");
-  const gate = runPerfGate(problem, { bruteForce: candidate.bruteForce, largeInput: candidate.largeInput });
-  if (!gate.ok) throw new Error(`perf: ${gate.failures[0]}`);
-  const tests = gate.evidence.includedAsTest ? [...problem.tests, gate.largeTest] : problem.tests;
+export async function obtainBruteForce(problem, archetype, log = () => {}) {
+  let feedback = null;
+  for (let i = 0; i < STAGE_RETRIES; i++) {
+    try {
+      const raw = await callOllama(buildBruteForcePrompt(problem, archetype, feedback), { temperature: STAGE_TEMPERATURES[i], top_p: 0.9, num_predict: 2048 });
+      const source = parseFunctionSource(extractJson(raw), "bruteForce");
+      const check = checkBruteForce(problem, source);
+      if (check.ok) {
+        log(`  brute force: agrees with the solution (call ${i + 1}/${STAGE_RETRIES})`);
+        return { source, brute: check.brute };
+      }
+      feedback = check.failures[0];
+    } catch (e) {
+      feedback = e.message;
+    }
+    log(`  brute force rejected (call ${i + 1}/${STAGE_RETRIES}): ${feedback}`);
+  }
+  throw new Error(`brute force: ${feedback}`);
+}
+
+/**
+ * Stage: ask for a large-input builder until the solution is fast and the brute force is slow on it.
+ * Returns {source, evidence, largeTest} or throws with the last reason.
+ */
+export async function obtainLargeInput(problem, archetype, brute, log = () => {}) {
+  let feedback = null;
+  for (let i = 0; i < STAGE_RETRIES; i++) {
+    try {
+      const raw = await callOllama(buildLargeInputPrompt(problem, archetype, feedback), { temperature: STAGE_TEMPERATURES[i], top_p: 0.9, num_predict: 2048 });
+      const source = parseFunctionSource(extractJson(raw), "largeInput");
+      const check = checkLargeInput(problem, brute, source);
+      if (check.ok) {
+        const perf = check.evidence;
+        log(`  perf gate: solution ${perf.solutionMs}ms, bruteForce ${perf.bruteForce} on (${perf.largeInputArgs.join(", ")})${perf.includedAsTest ? ", large input added as a test" : ""} (call ${i + 1}/${STAGE_RETRIES})`);
+        return { source, evidence: perf, largeTest: check.largeTest };
+      }
+      feedback = check.failures[0];
+    } catch (e) {
+      feedback = e.message;
+    }
+    log(`  large input rejected (call ${i + 1}/${STAGE_RETRIES}): ${feedback}`);
+  }
+  throw new Error(`large input: ${feedback}`);
+}
+
+/** Runs both hard stages and returns the problem with the evidence recorded. */
+export async function applyHardStages(problem, archetype, log = () => {}) {
+  const { brute } = await obtainBruteForce(problem, archetype, log);
+  const { source, evidence, largeTest } = await obtainLargeInput(problem, archetype, brute, log);
   return {
     ...problem,
-    tests,
-    judge: { ...(problem.judge ?? {}), archetype: archetype.key, performance: { ...gate.evidence, largeInput: candidate.largeInput.trim() } },
+    tests: evidence.includedAsTest ? [...problem.tests, largeTest] : problem.tests,
+    judge: { ...(problem.judge ?? {}), archetype: archetype.key, performance: { ...evidence, largeInput: source } },
   };
 }
 
@@ -248,17 +290,13 @@ async function generateOne({ topic, difficulty, existing }) {
     console.log(`  attempt ${attempt + 1}/${MAX_ATTEMPTS} (temperature ${temperature}${archetype ? `, archetype ${archetype.key}` : ""}${slotTopic !== topic ? `, topic ${slotTopic}` : ""})`);
     try {
       const prompt = buildPrompt({ topic: slotTopic, difficulty, existing: [...existing, ...rejected], feedback, archetype });
-      const raw = await callOllama(prompt, { temperature, top_p: 0.9, num_predict: archetype ? 8192 : 4096 });
+      const raw = await callOllama(prompt, { temperature, top_p: 0.9, num_predict: archetype ? 6144 : 4096 });
       const candidate = extractJson(raw);
       const entry = candidate && typeof candidate.id === "string" ? { id: candidate.id, title: String(candidate.title ?? "") } : null;
       if (entry) rejected.push(entry);
       let built = buildProblem(candidate, { existingIds, source: `ollama/${MODEL}` });
 
-      if (archetype) {
-        built = applyPerfGate(built, candidate, archetype);
-        const perf = built.judge.performance;
-        console.log(`  perf gate: solution ${perf.solutionMs}ms, bruteForce ${perf.bruteForce} on (${perf.largeInputArgs.join(", ")})${perf.includedAsTest ? ", large input added as a test" : ""}`);
-      }
+      if (archetype) built = await applyHardStages(built, archetype, console.log);
 
       await crossVerify(built, console.log);
 
