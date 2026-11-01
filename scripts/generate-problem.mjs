@@ -13,7 +13,8 @@
  * A rejected candidate's reason is fed into the next attempt's prompt.
  *
  * Env: OLLAMA_URL, OLLAMA_MODEL, OLLAMA_THINK=false, COUNT, TOPIC, DIFFICULTY, MAX_ATTEMPTS,
- *      GENERATION_BUDGET_MINUTES (no new attempt or stage call starts after this; 0 = unlimited)
+ *      GENERATION_BUDGET_MINUTES (no new attempt or stage call starts after this; 0 = unlimited),
+ *      ARCHETYPE (pin one hard archetype), ARCHETYPE_FIRST / ARCHETYPE_EXCLUDE (parallel slots, see lib/slots.mjs)
  */
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -275,8 +276,19 @@ function chooseArchetype(topic, difficulty, used) {
     if (!a) throw new Error(`unknown ARCHETYPE ${pinned}`);
     return a;
   }
-  return difficulty === "hard" ? pickArchetype(topic, used) : null;
+  if (difficulty !== "hard") return null;
+  // A parallel slot starts with its assigned archetype and may move on after failures, unlike ARCHETYPE.
+  const first = process.env.ARCHETYPE_FIRST?.trim();
+  if (first && !used.includes(first)) {
+    const a = findArchetype(first);
+    if (!a) throw new Error(`unknown ARCHETYPE_FIRST ${first}`);
+    return a;
+  }
+  return pickArchetype(topic, used);
 }
+
+/** Archetype keys sibling slots of the same run are working on; never chosen here. */
+const ARCHETYPE_EXCLUDE = (process.env.ARCHETYPE_EXCLUDE ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
 /** An archetype is given up after this many rejected attempts in a row; the next attempt gets another one. */
 const ATTEMPTS_PER_ARCHETYPE = 2;
@@ -287,7 +299,7 @@ async function generateOne({ topic, difficulty, existing }) {
   let feedback = null;
   // Rejected candidates join the avoid list: the model otherwise retells the same problem attempt after attempt.
   const rejected = [];
-  const usedArchetypes = [];
+  const usedArchetypes = [...ARCHETYPE_EXCLUDE];
   let archetype = null;
   let archetypeFailures = 0;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
