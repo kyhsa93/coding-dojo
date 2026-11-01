@@ -9,8 +9,12 @@ const DISABLE_THINKING = process.env.OLLAMA_THINK === "false";
  * and yields a truncated object. Abort as soon as the trailing whitespace run gets this long.
  */
 const MAX_TRAILING_WHITESPACE = 200;
-/** Same idea for any short unit (`0,0,0,...`, `"a","a",...`): abort once this much of the tail is one unit repeated. */
-const REPETITION_WINDOW = 1000;
+/**
+ * Same idea for any short unit (`0,0,0,...`, `"a","a",...`): abort once this much of the tail is one unit
+ * repeated. 1000 was too short: a grid test of 250 "." cells is legitimate output and was cut as degenerate
+ * (run 41324717805). 3000 characters is about 1000 tokens, five minutes of a real runaway on the runner.
+ */
+const REPETITION_WINDOW = 3000;
 const MAX_REPEAT_UNIT = 80;
 /** Hard wall-clock cap per call: a degenerate run that no detector catches still ends well inside the job limit. */
 export const CALL_TIMEOUT_MS = Number(process.env.OLLAMA_CALL_TIMEOUT_MS ?? 20 * 60_000);
