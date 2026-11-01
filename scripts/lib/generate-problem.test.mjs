@@ -22,3 +22,25 @@ test("a declared nullable return type may be null", () => {
   const p = buildProblem(nullable, { existingIds: new Set(), source: "test" });
   assert.equal(p.tests.at(-1).expected, null);
 });
+
+test("bare arguments of a one-parameter function are accepted as tests", () => {
+  const bare = { ...base, tests: [[1], [1, 2], [3], [4, 5], [-1, 1], [7, 7, 7], [10], [0, 2]], examples: [{ input: [1, 2] }], solution: "function sum(nums) { return nums.reduce((a, b) => a + b, 0); }" };
+  const p = buildProblem(bare, { existingIds: new Set(), source: "test" });
+  assert.deepEqual(p.tests[1], { input: [[1, 2]], expected: 3 });
+  assert.deepEqual(p.examples[0].input, [[1, 2]]);
+  const scalar = { ...base, params: [{ name: "n", type: "number" }], functionName: "twice", solution: "function twice(n) { return n * 2; }", tests: [1, 2, 3, 4, 5, 6, 7, 8], examples: [{ input: 3 }] };
+  const q = buildProblem(scalar, { existingIds: new Set(), source: "test" });
+  assert.deepEqual(q.tests[0], { input: [1], expected: 2 });
+  assert.deepEqual(q.examples[0], { input: [3], expected: 6 });
+  const two = { ...base, params: [{ name: "a", type: "number" }, { name: "b", type: "number" }], functionName: "add", solution: "function add(a, b) { return a + b; }", tests: [[1, 2, 3]], examples: [{ input: [1, 2] }] };
+  assert.throws(() => buildProblem(two, { existingIds: new Set(), source: "test" }), /test has 3 args, expected 2/);
+});
+
+test("a type-annotated solution is stripped to plain JavaScript", () => {
+  const typed = { ...base, solution: "function sum(nums: number[]): number { let s: number = 0; for (const x of nums) s += x; return s; }" };
+  const p = buildProblem(typed, { existingIds: new Set(), source: "test" });
+  assert.doesNotMatch(p.solution, /: number/);
+  assert.equal(p.tests[1].expected, 3);
+  const broken = { ...base, solution: "function sum(nums) { return ( ; }" };
+  assert.throws(() => buildProblem(broken, { existingIds: new Set(), source: "test" }), SyntaxError);
+});

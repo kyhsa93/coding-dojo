@@ -108,3 +108,12 @@ test("a non-finite brute force value is named, not printed as null", () => {
   assert.doesNotMatch(result.failures[0], /null/);
   assert.equal(show([1, -Infinity, NaN]), '[1,"-Infinity","NaN"]');
 });
+
+test("a type-annotated brute force loads after stripping", () => {
+  const typed = `function bruteForce(nums: number[]): number {
+    const dp: number[] = nums.map(() => 1); let best = nums.length ? 1 : 0;
+    for (let i = 0; i < nums.length; i++) for (let j = 0; j < i; j++) if (nums[j] < nums[i] && dp[j] + 1 > dp[i]) { dp[i] = dp[j] + 1; if (dp[i] > best) best = dp[i]; }
+    return best;
+  }`;
+  assert.equal(checkBruteForce(problemWith(smallInputs), typed).ok, true);
+});
