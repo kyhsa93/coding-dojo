@@ -142,7 +142,7 @@ ${COMMON_RULES}
 - Do NOT reuse these existing problems or trivial variants of them: ${avoid}
 - Write "title", "statement", "hints" and the example "explanation" in Korean. Keep identifiers in English.
 - "statement" is Markdown. State constraints (input sizes, value ranges), the result for the empty or smallest input, and tie-breaking rules precisely so the answer is unique.
-- "examples" are 2..3 argument lists (an array with exactly one element per parameter), each with a short Korean "explanation" of the expected result. Do NOT include expected outputs as fields; they are computed later.
+- "examples" are 2..3 argument lists, each with a short Korean "explanation" of the expected result. An example "input" is a positional array with exactly one element per parameter, in the order of "params" (for nums and k: [[1,2,3], 2]); never an object keyed by parameter names. Do NOT include expected outputs as fields; they are computed later.
 
 JSON shape (fill every field):
 {
@@ -152,9 +152,9 @@ JSON shape (fill every field):
   "tags": ["${topic.split(" ")[0]}", "..."],
   "statement": "마크다운 문제 설명",
   "functionName": "camelCaseName",
-  "params": [{"name": "nums", "type": "number[]"}],
+  "params": [{"name": "nums", "type": "number[]"}, {"name": "k", "type": "number"}],
   "returnType": "number",
-  "examples": [{"input": [[1,2,3]], "explanation": "..."}],
+  "examples": [{"input": [[1,2,3], 2], "explanation": "..."}],
   "hints": ["힌트 1", "힌트 2"]
 }`;
 }
@@ -228,8 +228,8 @@ const STAGE_TEMPERATURES = [0.3, 0.7, 0.5];
  * Split generation, step 2: ask for solution + tests until buildProblem accepts them. A rejection
  * (syntax error, wrong arity, undefined result, trivial outputs) retries this step only, with the reason.
  */
-export async function obtainImplementation(spec, archetype, { existingIds, source }, log = () => {}) {
-  let feedback = null;
+export async function obtainImplementation(spec, archetype, { existingIds, source }, log = () => {}, initialFeedback = null) {
+  let feedback = initialFeedback;
   let last = null;
   for (let i = 0; i < STAGE_RETRIES; i++) {
     try {
@@ -329,6 +329,25 @@ function inputNormalizer(params) {
     if (single && raw !== undefined && raw !== null && !singleIsArray) return [raw];
     return null;
   };
+}
+
+/**
+ * Split generation: when every brute force disagrees with the solution on the same input, the
+ * statement is probably clear and the solution wrong (run 41312490045: a "strictly increasing digits"
+ * count of 200 below 123 against three brute forces saying 47). Rewrite the solution once with that
+ * evidence, keeping the statement, before the attempt is given up.
+ */
+async function applyHardStagesSplit(spec, problem, archetype, ctx, log = () => {}) {
+  try {
+    return await applyHardStages(problem, archetype, log);
+  } catch (e) {
+    const m = /^brute force: (bruteForce disagrees with the solution on input .*?)(?:\. One of them|$)/s.exec(e.message);
+    if (!m) throw e;
+    log(`  solution suspect: ${m[1]}; rewriting the solution once with that evidence`);
+    const feedback = `an independent brute-force implementation of the statement disagrees with your solution: ${m[1]}. Re-derive the answer for that input from the statement by hand; if the brute force is right, your solution has a bug, fix it`;
+    const rewritten = await obtainImplementation(spec, archetype, ctx, log, feedback);
+    return applyHardStages(rewritten, archetype, log);
+  }
 }
 
 /** Turns a model candidate into a full problem or throws with a reason. */
@@ -487,12 +506,13 @@ async function generateOne({ topic, difficulty, existing }) {
       const source = `ollama/${MODEL}`;
       let entry = null;
       let built;
+      let spec = null;
       if (archetype && HARD_GENERATION === "split") {
         const raw = await callOllama(buildSpecPrompt({ topic: slotTopic, difficulty, existing: avoid, feedback, archetype }), { temperature, top_p: 0.9, num_predict: 3072 });
         const candidate = extractJson(raw);
         entry = candidate && typeof candidate.id === "string" ? { id: candidate.id, title: String(candidate.title ?? "") } : null;
         if (entry) rejected.push(entry);
-        const spec = buildSpec(candidate, { existingIds });
+        spec = buildSpec(candidate, { existingIds });
         console.log(`  spec: ${spec.id} ${signatureOf(spec)} (${spec.statement.length} chars, ${spec.examples.length} examples)`);
         built = await obtainImplementation(spec, archetype, { existingIds, source }, console.log);
       } else {
@@ -504,7 +524,7 @@ async function generateOne({ topic, difficulty, existing }) {
         built = buildProblem(candidate, { existingIds, source });
       }
 
-      if (archetype) built = await applyHardStages(built, archetype, console.log);
+      if (archetype) built = spec ? await applyHardStagesSplit(spec, built, archetype, { existingIds, source }, console.log) : await applyHardStages(built, archetype, console.log);
 
       await crossVerify(built, console.log);
 

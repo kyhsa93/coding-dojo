@@ -247,5 +247,9 @@ jobs:
           fi
           git commit -m "$title"
           git push origin "$branch"
-          gh pr create --base "$base" --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md"
+          if ! gh pr create --base "$base" --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md"; then
+            echo "::error::PR 생성 실패. 브랜치 $branch 는 push 되어 있다. 'GitHub Actions is not permitted to create or approve pull requests' 라면 저장소 Settings > Actions > General > Workflow permissions 에서 'Allow GitHub Actions to create and approve pull requests' 를 켠다."
+            echo "수동 PR: ${{ github.server_url }}/${{ github.repository }}/compare/$base...$branch"
+            exit 1
+          fi
           cat "$RUNNER_TEMP/pr-body.md" >> "$GITHUB_STEP_SUMMARY"

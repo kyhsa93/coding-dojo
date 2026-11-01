@@ -95,3 +95,9 @@ test("a spec plus a second-step answer builds the same problem as a single answe
   assert.equal(p.tests.length, 8);
   assert.equal(p.hints[0], "이분 탐색");
 });
+
+test("spec prompt shows positional example inputs for a two-parameter signature", () => {
+  const p = buildSpecPrompt({ topic: "array", difficulty: "hard", existing: [], feedback: null, archetype: findArchetype("binary-search-answer") });
+  assert.match(p, /never an object keyed by parameter names/);
+  assert.match(p, /"input": \[\[1,2,3\], 2\]/);
+});
