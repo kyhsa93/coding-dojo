@@ -29,4 +29,5 @@ test("domainBlock tells the model the setting, its vocabulary and the tag", () =
   assert.match(b, /maxSurge/);
   assert.match(b, /Include "containers" in "tags"/);
   assert.match(b, /no real APIs, clocks or network/);
+  assert.match(b, /never as an array of objects/);
 });

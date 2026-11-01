@@ -174,7 +174,7 @@ Signature: ${signatureOf(spec)}
 
 Rules:
 - "solution" is a complete, correct JavaScript (ES2022, no TypeScript type annotations, no imports, no console.log) implementation of the function named "${spec.functionName}" with exactly the parameters of the signature. It must follow the statement literally, handle every edge case the statement allows (including the empty or smallest input), and run each test in well under one second.
-${technique}- "tests" are INPUTS ONLY: an array of ${MIN_TESTS}..${MAX_TESTS} items, each item is the argument list (an array with exactly ${spec.params.length} element(s), one per parameter). Include edge cases: empty input, single element, duplicates, negative numbers where allowed, ties, and at least one case near the upper constraint but still small enough to list (a few hundred elements at most). Do NOT include expected outputs anywhere; they are computed by running your solution.
+${technique}- "tests" are INPUTS ONLY: an array of ${MIN_TESTS}..${MAX_TESTS} items, each item is the argument list (an array with exactly ${spec.params.length} element(s), one per parameter). Include edge cases: empty input, single element, duplicates, negative numbers where allowed, ties, and a few mixed cases. Keep every test SMALL: at most 40 elements per array and 40 characters per string, since a separate large input is generated later for the performance check. Do NOT include expected outputs anywhere; they are computed by running your solution.
 - Every value must be a JSON value within the statement's constraints.
 
 Statement:
@@ -202,12 +202,22 @@ export function buildSpec(candidate, { existingIds }) {
   if (statement.length < 80) throw new Error("statement too short");
   const normalizeInput = inputNormalizer(params);
   if (!Array.isArray(c.examples) || c.examples.length === 0) throw new Error("examples missing");
-  const examples = c.examples.slice(0, 3).map((raw) => {
+  // A malformed example (an object keyed by parameter names, a record list instead of an argument list)
+  // is dropped rather than failing the spec: the tests come from the next step anyway. Run 41318382740
+  // lost 4 of 12 attempts to this before any solution was asked for.
+  const malformed = [];
+  const examples = [];
+  for (const raw of c.examples) {
     const input = normalizeInput(raw);
-    if (!input || input.length !== params.length) throw new Error(`example input malformed: ${JSON.stringify(raw).slice(0, 80)} (need an array with ${params.length} argument(s))`);
+    if (!input || input.length !== params.length) {
+      malformed.push(JSON.stringify(raw).slice(0, 80));
+      continue;
+    }
     const explanation = typeof raw?.explanation === "string" ? raw.explanation.trim() : "";
-    return explanation ? { input, explanation } : { input };
-  });
+    examples.push(explanation ? { input, explanation } : { input });
+    if (examples.length === 3) break;
+  }
+  if (examples.length === 0) throw new Error(`example input malformed: ${malformed[0]} (need an array with ${params.length} argument(s), one per parameter in order)`);
   return {
     id: c.id,
     title: String(c.title ?? "").trim(),
@@ -219,6 +229,7 @@ export function buildSpec(candidate, { existingIds }) {
     returnType: c.returnType.trim(),
     examples,
     hints: Array.isArray(c.hints) ? c.hints : [],
+    droppedExamples: malformed,
   };
 }
 
@@ -517,7 +528,7 @@ async function generateOne({ topic, difficulty, existing }) {
         entry = candidate && typeof candidate.id === "string" ? { id: candidate.id, title: String(candidate.title ?? "") } : null;
         if (entry) rejected.push(entry);
         spec = buildSpec(candidate, { existingIds });
-        console.log(`  spec: ${spec.id} ${signatureOf(spec)} (${spec.statement.length} chars, ${spec.examples.length} examples)`);
+        console.log(`  spec: ${spec.id} ${signatureOf(spec)} (${spec.statement.length} chars, ${spec.examples.length} examples${spec.droppedExamples.length ? `, ${spec.droppedExamples.length} malformed dropped` : ""})`);
         built = await obtainImplementation(spec, archetype, { existingIds, source }, console.log);
       } else {
         const prompt = buildPrompt({ topic: slotTopic, difficulty, existing: avoid, feedback, archetype, domain });
