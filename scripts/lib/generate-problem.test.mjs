@@ -44,3 +44,54 @@ test("a type-annotated solution is stripped to plain JavaScript", () => {
   const broken = { ...base, solution: "function sum(nums) { return ( ; }" };
   assert.throws(() => buildProblem(broken, { existingIds: new Set(), source: "test" }), SyntaxError);
 });
+
+import { buildImplPrompt, buildSpec, buildSpecPrompt } from "../generate-problem.mjs";
+import { findArchetype } from "./archetypes.mjs";
+
+const specCandidate = {
+  id: "longest-increasing-run", title: "가장 긴 증가 구간", difficulty: "hard", tags: ["dynamic-programming"],
+  statement: "정수 배열 nums 가 주어지면 가장 긴 증가 부분 수열의 길이를 반환하세요. 배열 길이는 최대 100000, 각 원소는 -10^9 이상 10^9 이하입니다. 빈 배열이면 0을 반환합니다.",
+  functionName: "lis", params: [{ name: "nums", type: "number[]" }], returnType: "number",
+  examples: [{ input: [1, 3, 2, 4], explanation: "1,3,4 또는 1,2,4" }, { input: [[]], explanation: "빈 배열" }],
+  hints: ["이분 탐색"],
+};
+
+test("spec prompt asks for the statement only and carries the archetype and the feedback", () => {
+  const p = buildSpecPrompt({ topic: "dynamic-programming", difficulty: "hard", existing: [{ id: "a", title: "A" }], feedback: "statement too short", archetype: findArchetype("dp-lis-nlogn") });
+  assert.match(p, /write only the problem itself/);
+  assert.match(p, /Your previous attempt was rejected: statement too short/);
+  assert.match(p, /MUST use this technique/);
+  assert.match(p, /a \(A\)/);
+  assert.doesNotMatch(p, /"solution"/);
+  assert.doesNotMatch(p, /"tests"/);
+});
+
+test("buildSpec validates the first answer and normalizes bare example arguments", () => {
+  const spec = buildSpec(specCandidate, { existingIds: new Set() });
+  assert.deepEqual(spec.examples, [{ input: [[1, 3, 2, 4]], explanation: "1,3,4 또는 1,2,4" }, { input: [[]], explanation: "빈 배열" }]);
+  assert.throws(() => buildSpec({ ...specCandidate, statement: "짧다" }, { existingIds: new Set() }), /statement too short/);
+  assert.throws(() => buildSpec(specCandidate, { existingIds: new Set(["longest-increasing-run"]) }), /id duplicate/);
+  assert.throws(() => buildSpec({ ...specCandidate, params: [] }, { existingIds: new Set() }), /params/);
+  assert.throws(() => buildSpec({ ...specCandidate, examples: [] }, { existingIds: new Set() }), /examples missing/);
+});
+
+test("implementation prompt carries the signature, the statement, the examples and the technique", () => {
+  const spec = buildSpec(specCandidate, { existingIds: new Set() });
+  const p = buildImplPrompt(spec, findArchetype("dp-lis-nlogn"), "test has 2 args, expected 1");
+  assert.match(p, /Signature: lis\(nums: number\[\]\): number/);
+  assert.match(p, /Your previous answer was rejected: test has 2 args, expected 1/);
+  assert.match(p, /MUST implement this technique/);
+  assert.match(p, /\[\[1,3,2,4\]\]/);
+  assert.match(p, /"solution": "function lis\(nums\)/);
+  assert.match(p, /exactly 1 element\(s\)/);
+});
+
+test("a spec plus a second-step answer builds the same problem as a single answer", () => {
+  const spec = buildSpec(specCandidate, { existingIds: new Set() });
+  const impl = { solution: "function lis(nums) { const t = []; for (const x of nums) { let lo = 0, hi = t.length; while (lo < hi) { const m = (lo + hi) >> 1; if (t[m] < x) lo = m + 1; else hi = m; } t[lo] = x; } return t.length; }", tests: [[[1, 3, 2, 4]], [[]], [[5]], [[9, 8, 7]], [[1, 2, 3]], [[2, 2, 2]], [[1, 5, 2, 6, 3, 7]], [[-1, -2, -3, 0]]] };
+  const p = buildProblem({ ...spec, ...impl }, { existingIds: new Set(), source: "test" });
+  assert.equal(p.id, "longest-increasing-run");
+  assert.deepEqual(p.examples[0], { input: [[1, 3, 2, 4]], expected: 3, explanation: "1,3,4 또는 1,2,4" });
+  assert.equal(p.tests.length, 8);
+  assert.equal(p.hints[0], "이분 탐색");
+});
