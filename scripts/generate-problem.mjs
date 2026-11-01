@@ -15,7 +15,8 @@
  * Env: OLLAMA_URL, OLLAMA_MODEL, OLLAMA_THINK=false, COUNT, TOPIC, DIFFICULTY, MAX_ATTEMPTS,
  *      GENERATION_BUDGET_MINUTES (no new attempt or stage call starts after this; 0 = unlimited),
  *      ARCHETYPE (pin one hard archetype), ARCHETYPE_FIRST / ARCHETYPE_EXCLUDE (parallel slots, see lib/slots.mjs),
- *      HARD_GENERATION=split|single (hard: statement first and solution + tests second, or one call)
+ *      HARD_GENERATION=split|single (hard: statement first and solution + tests second, or one call),
+ *      DOMAIN (setting the problem is told in: backend, containers, aws, ...; none; empty = random, see lib/domains.mjs)
  */
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -25,6 +26,7 @@ import { buildCrossSolvePrompt, buildJudgePrompt, crossCheck, parseCrossSolution
 import { findArchetype, pickArchetype, servesTopic } from "./lib/archetypes.mjs";
 import { checkBruteForce, checkLargeInput } from "./lib/perf-gate.mjs";
 import { buildBruteForcePrompt, buildLargeInputPrompt, parseFunctionSource } from "./lib/hard-stages.mjs";
+import { domainBlock, pickDomain } from "./lib/domains.mjs";
 
 const COUNT = Math.max(1, Number(process.env.COUNT ?? 1));
 const MAX_ATTEMPTS = Math.max(1, Number(process.env.MAX_ATTEMPTS ?? 4));
@@ -76,14 +78,14 @@ Hard problem requirements (a reviewer and an automated performance gate check th
 `;
 }
 
-function buildPrompt({ topic, difficulty, existing, feedback, archetype }) {
+export function buildPrompt({ topic, difficulty, existing, feedback, archetype, domain = null }) {
   const avoid = existing.map((p) => `${p.id} (${p.title}${p.algorithm ? `: ${p.algorithm}` : ""})`).join(", ") || "(none)";
   const feedbackBlock = feedback ? `\nYour previous attempt was rejected: ${feedback}\nFix that in this attempt.\n` : "";
   return `You are writing one coding interview problem for a practice site. Output ONLY a compact JSON object on a single line: no prose, no markdown fences, no newlines or indentation between fields.
 ${feedbackBlock}${hardBlock(archetype)}
 Constraints:
 - Topic: ${topic}
-- Difficulty: ${difficulty}. easy = one pass or direct simulation; medium = a known technique (two pointers, sliding window, binary search, BFS/DFS, prefix sums, 1-D DP, heap) applied carefully; hard = several techniques combined, a non-obvious 2-D DP or graph algorithm, or an insight most candidates miss. A reviewer will grade the real difficulty from your solution and reject a mismatch.
+${domainBlock(domain)}- Difficulty: ${difficulty}. easy = one pass or direct simulation; medium = a known technique (two pointers, sliding window, binary search, BFS/DFS, prefix sums, 1-D DP, heap) applied carefully; hard = several techniques combined, a non-obvious 2-D DP or graph algorithm, or an insight most candidates miss. A reviewer will grade the real difficulty from your solution and reject a mismatch.
 - The problem must be solvable as a single pure function. No classes, no I/O, no randomness, no dates based on "now".
 - All inputs and outputs must be JSON values: numbers, strings, booleans, null, arrays, plain objects. No undefined, NaN, Infinity, functions, Map, Set, BigInt.
 - Parameter and return types use TypeScript notation limited to: number, string, boolean, number[], string[], boolean[], number[][], string[][], Record<string, number>, Record<string, string>.
@@ -123,7 +125,7 @@ const signatureOf = (spec) => `${spec.functionName}(${spec.params.map((p) => `${
  * CPU runner degenerates (repeated fragments, truncated JSON, type annotations). Two shorter answers
  * keep each call inside the range the model handles, and a failed implementation retries alone.
  */
-export function buildSpecPrompt({ topic, difficulty, existing, feedback, archetype }) {
+export function buildSpecPrompt({ topic, difficulty, existing, feedback, archetype, domain = null }) {
   const avoid = existing.map((p) => `${p.id} (${p.title}${p.algorithm ? `: ${p.algorithm}` : ""})`).join(", ") || "(none)";
   const feedbackBlock = feedback ? `\nYour previous attempt was rejected: ${feedback}\nFix that in this attempt.\n` : "";
   const hard = archetype
@@ -137,7 +139,7 @@ Hard problem requirements (a reviewer and an automated performance gate check th
 ${feedbackBlock}${hard}
 Constraints:
 - Topic: ${topic}
-- Difficulty: ${difficulty}. easy = one pass or direct simulation; medium = a known technique (two pointers, sliding window, binary search, BFS/DFS, prefix sums, 1-D DP, heap) applied carefully; hard = several techniques combined, a non-obvious 2-D DP or graph algorithm, or an insight most candidates miss.
+${domainBlock(domain)}- Difficulty: ${difficulty}. easy = one pass or direct simulation; medium = a known technique (two pointers, sliding window, binary search, BFS/DFS, prefix sums, 1-D DP, heap) applied carefully; hard = several techniques combined, a non-obvious 2-D DP or graph algorithm, or an insight most candidates miss.
 ${COMMON_RULES}
 - Do NOT reuse these existing problems or trivial variants of them: ${avoid}
 - Write "title", "statement", "hints" and the example "explanation" in Korean. Keep identifiers in English.
@@ -500,7 +502,9 @@ async function generateOne({ topic, difficulty, existing }) {
     }
     // The archetype decides the real topic when the requested one has no hard archetype.
     const slotTopic = archetype && !servesTopic(archetype, topic) ? archetype.topics[0] : topic;
-    console.log(`  attempt ${attempt + 1}/${MAX_ATTEMPTS} (temperature ${temperature}${archetype ? `, archetype ${archetype.key}` : ""}${slotTopic !== topic ? `, topic ${slotTopic}` : ""})`);
+    // The setting is drawn per attempt: a story the model cannot make a problem of should not block the slot.
+    const domain = pickDomain(process.env);
+    console.log(`  attempt ${attempt + 1}/${MAX_ATTEMPTS} (temperature ${temperature}${archetype ? `, archetype ${archetype.key}` : ""}${slotTopic !== topic ? `, topic ${slotTopic}` : ""}${domain ? `, setting ${domain.key}` : ""})`);
     try {
       const avoid = [...existing, ...rejected];
       const source = `ollama/${MODEL}`;
@@ -508,7 +512,7 @@ async function generateOne({ topic, difficulty, existing }) {
       let built;
       let spec = null;
       if (archetype && HARD_GENERATION === "split") {
-        const raw = await callOllama(buildSpecPrompt({ topic: slotTopic, difficulty, existing: avoid, feedback, archetype }), { temperature, top_p: 0.9, num_predict: 3072 });
+        const raw = await callOllama(buildSpecPrompt({ topic: slotTopic, difficulty, existing: avoid, feedback, archetype, domain }), { temperature, top_p: 0.9, num_predict: 3072 });
         const candidate = extractJson(raw);
         entry = candidate && typeof candidate.id === "string" ? { id: candidate.id, title: String(candidate.title ?? "") } : null;
         if (entry) rejected.push(entry);
@@ -516,7 +520,7 @@ async function generateOne({ topic, difficulty, existing }) {
         console.log(`  spec: ${spec.id} ${signatureOf(spec)} (${spec.statement.length} chars, ${spec.examples.length} examples)`);
         built = await obtainImplementation(spec, archetype, { existingIds, source }, console.log);
       } else {
-        const prompt = buildPrompt({ topic: slotTopic, difficulty, existing: avoid, feedback, archetype });
+        const prompt = buildPrompt({ topic: slotTopic, difficulty, existing: avoid, feedback, archetype, domain });
         const raw = await callOllama(prompt, { temperature, top_p: 0.9, num_predict: archetype ? 6144 : 4096 });
         const candidate = extractJson(raw);
         entry = candidate && typeof candidate.id === "string" ? { id: candidate.id, title: String(candidate.title ?? "") } : null;
