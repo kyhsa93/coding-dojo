@@ -1,0 +1,175 @@
+{
+  "id": "count-subarrays-with-exactly-k-distinct-values",
+  "title": "정확히 k개의 고유한 값이 있는 서브어레이 개수 세기",
+  "difficulty": "hard",
+  "tags": [
+    "sliding-window"
+  ],
+  "statement": "정수로 이루어진 배열 nums와 양의 정수 k가 주어졌을 때, nums의 연속적인 부분 배열(서브어레이) 중에서 정확히 k개의 고유한 값을 포함하는 서브어레이의 개수를 계산하세요. 배열의 길이 n은 최대 200,000이고, k는 1에서 100 사이일 수 있습니다. 단순한 O(n^2) 알고리즘은 시간 초과로 이어지므로, 더 효율적인 방법을 사용해야 합니다.\n\n빈 배열이거나 고유한 값이 k개 미만이면 0을 반환합니다.",
+  "functionName": "countSubarraysWithExactlyKDistinct",
+  "params": [
+    {
+      "name": "nums",
+      "type": "number[]"
+    },
+    {
+      "name": "k",
+      "type": "number"
+    }
+  ],
+  "returnType": "number",
+  "starterCode": {
+    "javascript": "function countSubarraysWithExactlyKDistinct(nums, k) {\n  // 여기에 코드를 작성하세요\n}\n",
+    "typescript": "function countSubarraysWithExactlyKDistinct(nums: number[], k: number): number {\n  // 여기에 코드를 작성하세요\n}\n",
+    "python": "def countSubarraysWithExactlyKDistinct(nums: list[int], k: int) -> int:\n    # 여기에 코드를 작성하세요\n    pass\n"
+  },
+  "examples": [
+    {
+      "input": [
+        [
+          1,
+          2,
+          1,
+          2,
+          3
+        ],
+        2
+      ],
+      "expected": 7,
+      "explanation": "정확히 2개의 고유한 값을 포함하는 서브어레이의 개수는 7입니다."
+    },
+    {
+      "input": [
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        1
+      ],
+      "expected": 10,
+      "explanation": "모든 서브어레이가 1개의 고유한 값을 포함하므로, 총 10개입니다."
+    }
+  ],
+  "tests": [
+    {
+      "input": [
+        [
+          1,
+          2,
+          1,
+          2,
+          3
+        ],
+        2
+      ],
+      "expected": 7
+    },
+    {
+      "input": [
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        1
+      ],
+      "expected": 10
+    },
+    {
+      "input": [
+        [],
+        1
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          1
+        ],
+        1
+      ],
+      "expected": 1
+    },
+    {
+      "input": [
+        [
+          -1,
+          -2,
+          -3
+        ],
+        2
+      ],
+      "expected": 2
+    },
+    {
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        5
+      ],
+      "expected": 1
+    },
+    {
+      "input": [
+        [
+          1,
+          2,
+          2,
+          3,
+          3,
+          3
+        ],
+        2
+      ],
+      "expected": 8
+    },
+    {
+      "input": [
+        [
+          1,
+          2,
+          3,
+          2,
+          1
+        ],
+        2
+      ],
+      "expected": 5
+    }
+  ],
+  "hints": [
+    "서브어레이에 정확히 k개의 고유한 값을 가지는 개수를 계산하기 위해, atMost(k) - atMost(k-1) 방법을 사용하세요.",
+    "슬라이딩 윈도우 기법과 해시맵을 사용하여 atMost(k)를 효율적으로 계산할 수 있습니다."
+  ],
+  "solution": "function countSubarraysWithExactlyKDistinct(nums, k) {function atMost(k) {let count = 0, left = 0, map = new Map();for (let right = 0; right < nums.length; right++) {let num = nums[right];map.set(num, (map.get(num) || 0) + 1);while (map.size > k) {let leftNum = nums[left++];map.set(leftNum, map.get(leftNum) - 1);if (map.get(leftNum) === 0) map.delete(leftNum);}count += right - left + 1;}return count;}return atMost(k) - atMost(k - 1);}",
+  "createdAt": "2026-11-01",
+  "source": "ollama/qwen3:14b",
+  "judge": {
+    "archetype": "window-exactly-k-distinct",
+    "performance": {
+      "solutionMs": 42,
+      "bruteForce": "timeout>2000ms",
+      "largeInputArgs": [
+        "array[200000]",
+        "100"
+      ],
+      "includedAsTest": false,
+      "largeInput": "function largeInput() { let s = 12345; const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648; const nums = []; const k = 100; for (let i = 0; i < 200000; i++) nums.push(Math.floor(rnd() * 1000) + 1); return [nums, k]; }"
+    },
+    "difficulty": "hard",
+    "algorithm": "슬라이딩 윈도우와 atMost(k) - atMost(k-1) 기법을 사용",
+    "reason": "atMost 함수를 통해 슬라이딩 윈도우 기법을 적용하고, 이를 통해 정확히 k개의 고유한 값을 갖는 서브어레이의 수를 계산",
+    "usesTechnique": true,
+    "opinion": "medium",
+    "crossChecked": true
+  }
+}
