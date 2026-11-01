@@ -23,6 +23,10 @@ on:
         description: "슬롯당 최대 시도 횟수"
         type: number
         default: 4
+      archetype:
+        description: "hard 아키타입 키 (scripts/lib/archetypes.mjs). 지정하면 난이도는 hard 로 고정"
+        type: string
+        default: ""
       rejudge:
         description: "재판정할 문제 id (쉼표 구분, all = 생성된 문제 전부). 지정하면 생성 대신 재판정만 한다"
         type: string
@@ -47,6 +51,7 @@ jobs:
       DIFFICULTY: ${{ inputs.difficulty }}
       REJUDGE: ${{ inputs.rejudge }}
       MAX_ATTEMPTS: ${{ inputs.max_attempts || 4 }}
+      ARCHETYPE: ${{ inputs.archetype }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:

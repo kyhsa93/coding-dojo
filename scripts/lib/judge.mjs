@@ -11,8 +11,20 @@ import { DIFFICULTIES, deepEqual, loadSolution, runCase } from "./problem-utils.
 
 const RANK = Object.fromEntries(DIFFICULTIES.map((d, i) => [d, i]));
 
-export function buildJudgePrompt(problem) {
+/**
+ * `technique` (hard problems built from an archetype): the judge must also say whether the reference
+ * solution really implements it. The difficulty opinion is still collected for the record.
+ */
+export function buildJudgePrompt(problem, { technique } = {}) {
+  const techniqueBlock = technique
+    ? `
+Required technique: ${technique}
+Also answer "usesTechnique": true only if the reference solution genuinely implements this technique, false if it uses a simpler approach that merely passes the tests.
+`
+    : "";
+  const techniqueField = technique ? `, "usesTechnique": true|false` : "";
   return `You are a strict reviewer grading the REAL difficulty of a coding interview problem. Output ONLY a JSON object, no prose.
+${techniqueBlock}
 
 Grading scale (judge by the simplest correct approach, not by how the statement sounds):
 - easy: one pass or direct simulation, basic counting with a hash map, simple sorting, a single loop with an obvious accumulator. Any junior developer solves it in under 10 minutes.
@@ -32,18 +44,23 @@ Reference solution:
 ${problem.solution}
 
 JSON shape:
-{"difficulty": "easy|medium|hard", "algorithm": "핵심 알고리즘 한 줄 (한국어)", "reason": "판정 근거 한두 문장 (한국어)"}`;
+{"difficulty": "easy|medium|hard", "algorithm": "핵심 알고리즘 한 줄 (한국어)", "reason": "판정 근거 한두 문장 (한국어)"${techniqueField}}`;
 }
 
 export function parseJudgement(candidate) {
   if (!candidate || typeof candidate !== "object") throw new Error("judge: not an object");
   const difficulty = String(candidate.difficulty ?? "").toLowerCase().trim();
   if (!DIFFICULTIES.includes(difficulty)) throw new Error(`judge: bad difficulty ${candidate.difficulty}`);
-  return {
+  const out = {
     difficulty,
     algorithm: String(candidate.algorithm ?? "").trim(),
     reason: String(candidate.reason ?? "").trim(),
   };
+  if ("usesTechnique" in candidate) {
+    const v = candidate.usesTechnique;
+    out.usesTechnique = v === true || String(v).toLowerCase() === "true";
+  }
+  return out;
 }
 
 /**
@@ -51,8 +68,18 @@ export function parseJudgement(candidate) {
  * - same level: keep
  * - one level apart: relabel to the judged level
  * - two levels apart (easy<->hard): reject, the problem is not what was asked for
+ *
+ * `objective` (hard problems that passed the performance gate): the measured evidence outranks the
+ * model's difficulty opinion, so the label stays hard. The problem is rejected only when the judge
+ * says the required technique is not implemented.
  */
-export function reconcileDifficulty(problem, judgement) {
+export function reconcileDifficulty(problem, judgement, { objective = false } = {}) {
+  if (objective && problem.difficulty === "hard") {
+    if (judgement.usesTechnique === false) {
+      return { action: "reject", reason: `the solution does not implement the required technique: ${judgement.reason}` };
+    }
+    return { action: "keep", problem: applyJudgement(problem, { ...judgement, difficulty: "hard" }, { opinion: judgement.difficulty }) };
+  }
   const gap = Math.abs(RANK[problem.difficulty] - RANK[judgement.difficulty]);
   if (gap >= 2) {
     return { action: "reject", reason: `judged ${judgement.difficulty} but labeled ${problem.difficulty}: ${judgement.reason}` };
@@ -61,12 +88,12 @@ export function reconcileDifficulty(problem, judgement) {
 }
 
 /** Returns a copy of the problem labeled with the judged difficulty and the judgement recorded. */
-export function applyJudgement(problem, judgement) {
-  return {
-    ...problem,
-    difficulty: judgement.difficulty,
-    judge: { difficulty: judgement.difficulty, algorithm: judgement.algorithm, reason: judgement.reason },
-  };
+export function applyJudgement(problem, judgement, extra = {}) {
+  const judge = { ...(problem.judge ?? {}), difficulty: judgement.difficulty, algorithm: judgement.algorithm, reason: judgement.reason };
+  if (judgement.usesTechnique !== undefined) judge.usesTechnique = judgement.usesTechnique;
+  if (extra.opinion && extra.opinion !== judgement.difficulty) judge.opinion = extra.opinion;
+  else delete judge.opinion;
+  return { ...problem, difficulty: judgement.difficulty, judge };
 }
 
 /* ---------- cross-check: an independent solution written from the statement alone ---------- */

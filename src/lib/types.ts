@@ -40,7 +40,25 @@ export interface Problem {
   createdAt: string;
   source?: string;
   /** Second model pass that graded the real difficulty. Present on generated problems. */
-  judge?: { difficulty: Difficulty; algorithm: string; reason: string; crossChecked?: boolean };
+  judge?: {
+    difficulty: Difficulty;
+    algorithm: string;
+    reason: string;
+    crossChecked?: boolean;
+    /** Hard problems only: the archetype key the problem was built from and the judge's technique check. */
+    archetype?: string;
+    usesTechnique?: boolean;
+    /** The judge's own difficulty opinion when the measured label (hard) overrode it. */
+    opinion?: Difficulty;
+    /** Performance gate evidence: the solution is fast and the brute force is slow on the large input. */
+    performance?: {
+      solutionMs: number | null;
+      bruteForce: string | null;
+      largeInputArgs: string[] | null;
+      includedAsTest: boolean;
+      largeInput: string;
+    };
+  };
 }
 
 export type TestStatus = "pass" | "fail" | "error" | "timeout";

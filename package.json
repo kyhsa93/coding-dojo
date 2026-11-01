@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node scripts/validate-problems.mjs",
+    "test": "node scripts/validate-problems.mjs && node --test \"scripts/lib/*.test.mjs\"",
     "generate": "node scripts/generate-problem.mjs",
     "judge": "node scripts/judge-problems.mjs"
   },
