@@ -3,7 +3,8 @@
  * rewrites the label with the judged value. A two-level gap (easy<->hard) is also
  * relabeled but printed as FLAG so you can decide whether the problem is worth keeping.
  * Each problem is also cross-checked (independent solution from the statement); a disagreement is
- * printed as FLAG and nothing is deleted.
+ * printed as FLAG and nothing is deleted. Hard problems built from an archetype (judge.archetype) keep
+ * their measured label; they are flagged only when the judge says the technique is not implemented.
  *
  * Usage: node scripts/judge-problems.mjs [id ...]   (no ids = every problem with source ollama/*)
  */
@@ -12,6 +13,7 @@ import path from "node:path";
 import { callOllama, extractJson } from "./lib/ollama.mjs";
 import { applyJudgement, buildJudgePrompt, parseJudgement, reconcileDifficulty } from "./lib/judge.mjs";
 import { crossVerify } from "./generate-problem.mjs";
+import { findArchetype } from "./lib/archetypes.mjs";
 
 const problemsDir = path.resolve(import.meta.dirname, "../problems");
 const wanted = process.argv.slice(2).map((s) => s.trim()).filter(Boolean);
@@ -34,8 +36,12 @@ for (const f of files) {
     console.log(`FLAG    ${problem.id}: ${e.message}`);
   }
 
-  const judgement = parseJudgement(extractJson(await callOllama(buildJudgePrompt(problem), { temperature: 0, num_predict: 512 })));
-  const outcome = reconcileDifficulty(problem, judgement);
+  // Problems built from a hard archetype keep their measured label; only the technique check can flag them.
+  const archetype = findArchetype(problem.judge?.archetype);
+  const objective = Boolean(archetype && problem.judge?.performance);
+  const prompt = buildJudgePrompt(problem, archetype ? { technique: archetype.technique } : {});
+  const judgement = parseJudgement(extractJson(await callOllama(prompt, { temperature: 0, num_predict: 512 })));
+  const outcome = reconcileDifficulty(problem, judgement, { objective });
   const next = outcome.problem ?? applyJudgement(problem, judgement);
   next.judge.crossChecked = crossChecked;
   const mark = outcome.action === "reject" ? "FLAG   " : outcome.action === "relabel" ? "RELABEL" : "keep   ";

@@ -19,6 +19,8 @@ import path from "node:path";
 import { DIFFICULTIES, LANGUAGES, loadSolution, runCase, starterFor, validateShape, verifySolution } from "./lib/problem-utils.mjs";
 import { MODEL, callOllama, extractJson } from "./lib/ollama.mjs";
 import { buildCrossSolvePrompt, buildJudgePrompt, crossCheck, parseCrossSolution, parseJudgement, reconcileDifficulty } from "./lib/judge.mjs";
+import { findArchetype, pickArchetype, servesTopic } from "./lib/archetypes.mjs";
+import { BRUTE_TIMEOUT_MS, SOLUTION_MAX_MS, runPerfGate } from "./lib/perf-gate.mjs";
 
 const COUNT = Math.max(1, Number(process.env.COUNT ?? 1));
 const MAX_ATTEMPTS = Math.max(1, Number(process.env.MAX_ATTEMPTS ?? 4));
@@ -48,11 +50,32 @@ async function existingProblems() {
   return out;
 }
 
-function buildPrompt({ topic, difficulty, existing, feedback }) {
-  const avoid = existing.map((p) => `${p.id} (${p.title})`).join(", ") || "(none)";
+/**
+ * Hard problems are built from an archetype: the model is told which technique the solution must use
+ * and must also hand over a brute force and a large-input builder for the performance gate.
+ */
+function hardBlock(archetype) {
+  if (!archetype) return "";
+  return `
+Hard problem requirements (an automated gate measures these, a mismatch is rejected):
+- Required technique: ${archetype.technique}. The "solution" MUST implement this technique; a reviewer checks it. Design the problem so a simpler approach is too slow.
+- State constraints in the statement big enough that the technique is needed. Guidance: ${archetype.large}.
+- "bruteForce": a second JavaScript function named "bruteForce" with exactly the same parameters, written in the most obvious slow way (${archetype.brute}). It must return the same values as "solution" on the small tests and must NOT finish the large input within ${BRUTE_TIMEOUT_MS}ms. Keep it simple: loops/recursion, no clever pruning, and no recursion deeper than ~5000 frames.
+- "largeInput": a JavaScript function named "largeInput" with no parameters that builds ONE argument list at the upper constraint and returns it as an array (one element per parameter). It must be deterministic: use a seeded generator like \`let s = 12345; const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;\`, never Math.random or Date. "solution" must finish it within ${SOLUTION_MAX_MS}ms.
+- Keep the regular "tests" small (a few hundred elements at most) so the brute force can finish them.
+`;
+}
+
+function buildPrompt({ topic, difficulty, existing, feedback, archetype }) {
+  const avoid = existing.map((p) => `${p.id} (${p.title}${p.algorithm ? `: ${p.algorithm}` : ""})`).join(", ") || "(none)";
   const feedbackBlock = feedback ? `\nYour previous attempt was rejected: ${feedback}\nFix that in this attempt.\n` : "";
+  const extraFields = archetype
+    ? `,
+  "bruteForce": "function bruteForce(nums) { ... }",
+  "largeInput": "function largeInput() { let s = 12345; const rnd = () => ...; return [ ... ]; }"`
+    : "";
   return `You are writing one coding interview problem for a practice site. Output ONLY a compact JSON object on a single line: no prose, no markdown fences, no newlines or indentation between fields.
-${feedbackBlock}
+${feedbackBlock}${hardBlock(archetype)}
 Constraints:
 - Topic: ${topic}
 - Difficulty: ${difficulty}. easy = one pass or direct simulation; medium = a known technique (two pointers, sliding window, binary search, BFS/DFS, prefix sums, 1-D DP, heap) applied carefully; hard = several techniques combined, a non-obvious 2-D DP or graph algorithm, or an insight most candidates miss. A reviewer will grade the real difficulty from your solution and reject a mismatch.
@@ -79,8 +102,25 @@ JSON shape (fill every field):
   "examples": [{"input": [[1,2,3]], "explanation": "..."}],
   "tests": [[[1,2,3]], [[]], [[5]]],
   "hints": ["힌트 1", "힌트 2"],
-  "solution": "function camelCaseName(nums) { ... }"
+  "solution": "function camelCaseName(nums) { ... }"${extraFields}
 }`;
+}
+
+/**
+ * Performance gate for an archetype-built hard problem. Returns the problem with the evidence recorded
+ * (and the large input appended as a test when it is small enough) or throws with the reason.
+ */
+export function applyPerfGate(problem, candidate, archetype) {
+  if (typeof candidate.bruteForce !== "string" || !candidate.bruteForce.trim()) throw new Error("perf: bruteForce missing");
+  if (typeof candidate.largeInput !== "string" || !candidate.largeInput.trim()) throw new Error("perf: largeInput missing");
+  const gate = runPerfGate(problem, { bruteForce: candidate.bruteForce, largeInput: candidate.largeInput });
+  if (!gate.ok) throw new Error(`perf: ${gate.failures[0]}`);
+  const tests = gate.evidence.includedAsTest ? [...problem.tests, gate.largeTest] : problem.tests;
+  return {
+    ...problem,
+    tests,
+    judge: { ...(problem.judge ?? {}), archetype: archetype.key, performance: { ...gate.evidence, largeInput: candidate.largeInput.trim() } },
+  };
 }
 
 /** Turns a model candidate into a full problem or throws with a reason. */
@@ -168,10 +208,24 @@ export async function crossVerify(problem, log = () => {}) {
 }
 
 /** Second model pass: grade the real difficulty. Returns the judgement. */
-export async function judgeProblem(problem) {
-  const raw = await callOllama(buildJudgePrompt(problem), { temperature: 0, num_predict: 512 });
+export async function judgeProblem(problem, archetype = null) {
+  const raw = await callOllama(buildJudgePrompt(problem, archetype ? { technique: archetype.technique } : {}), { temperature: 0, num_predict: 512 });
   return parseJudgement(extractJson(raw));
 }
+
+/** Archetype for this slot: the ARCHETYPE env pins one, otherwise hard problems get one picked for the topic. */
+function chooseArchetype(topic, difficulty, used) {
+  const pinned = process.env.ARCHETYPE?.trim();
+  if (pinned) {
+    const a = findArchetype(pinned);
+    if (!a) throw new Error(`unknown ARCHETYPE ${pinned}`);
+    return a;
+  }
+  return difficulty === "hard" ? pickArchetype(topic, used) : null;
+}
+
+/** An archetype is given up after this many rejected attempts in a row; the next attempt gets another one. */
+const ATTEMPTS_PER_ARCHETYPE = 2;
 
 async function generateOne({ topic, difficulty, existing }) {
   const existingIds = new Set(existing.map((p) => p.id));
@@ -179,15 +233,37 @@ async function generateOne({ topic, difficulty, existing }) {
   let feedback = null;
   // Rejected candidates join the avoid list: the model otherwise retells the same problem attempt after attempt.
   const rejected = [];
+  const usedArchetypes = [];
+  let archetype = null;
+  let archetypeFailures = 0;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const temperature = temperatures[attempt % temperatures.length];
-    console.log(`  attempt ${attempt + 1}/${MAX_ATTEMPTS} (temperature ${temperature})`);
+    if (!archetype || archetypeFailures >= ATTEMPTS_PER_ARCHETYPE) {
+      archetype = chooseArchetype(topic, difficulty, usedArchetypes);
+      archetypeFailures = 0;
+      if (archetype) usedArchetypes.push(archetype.key);
+    }
+    // The archetype decides the real topic when the requested one has no hard archetype.
+    const slotTopic = archetype && !servesTopic(archetype, topic) ? archetype.topics[0] : topic;
+    console.log(`  attempt ${attempt + 1}/${MAX_ATTEMPTS} (temperature ${temperature}${archetype ? `, archetype ${archetype.key}` : ""}${slotTopic !== topic ? `, topic ${slotTopic}` : ""})`);
     try {
-      const prompt = buildPrompt({ topic, difficulty, existing: [...existing, ...rejected], feedback });
-      const raw = await callOllama(prompt, { temperature, top_p: 0.9, num_predict: 4096 });
+      const prompt = buildPrompt({ topic: slotTopic, difficulty, existing: [...existing, ...rejected], feedback, archetype });
+      const raw = await callOllama(prompt, { temperature, top_p: 0.9, num_predict: archetype ? 8192 : 4096 });
       const candidate = extractJson(raw);
-      if (candidate && typeof candidate.id === "string") rejected.push({ id: candidate.id, title: String(candidate.title ?? "") });
-      const built = buildProblem(candidate, { existingIds, source: `ollama/${MODEL}` });
+      const entry = candidate && typeof candidate.id === "string" ? { id: candidate.id, title: String(candidate.title ?? "") } : null;
+      if (entry) rejected.push(entry);
+      let built = buildProblem(candidate, { existingIds, source: `ollama/${MODEL}` });
+
+      if (archetype) {
+        try {
+          built = applyPerfGate(built, candidate, archetype);
+          const perf = built.judge.performance;
+          console.log(`  perf gate: solution ${perf.solutionMs}ms, bruteForce ${perf.bruteForce} on (${perf.largeInputArgs.join(", ")})${perf.includedAsTest ? ", large input added as a test" : ""}`);
+        } catch (e) {
+          feedback = e.message;
+          throw e;
+        }
+      }
 
       try {
         await crossVerify(built, console.log);
@@ -196,9 +272,10 @@ async function generateOne({ topic, difficulty, existing }) {
         throw e;
       }
 
-      const judgement = await judgeProblem(built);
-      console.log(`  judge: ${judgement.difficulty} (${judgement.algorithm})`);
-      const outcome = reconcileDifficulty(built, judgement);
+      const judgement = await judgeProblem(built, archetype);
+      if (entry) entry.algorithm = judgement.algorithm;
+      console.log(`  judge: ${judgement.difficulty} (${judgement.algorithm})${judgement.usesTechnique !== undefined ? `, usesTechnique=${judgement.usesTechnique}` : ""}`);
+      const outcome = reconcileDifficulty(built, judgement, { objective: Boolean(archetype) });
       if (outcome.action === "reject") {
         feedback = outcome.reason;
         throw new Error(`difficulty: ${outcome.reason}`);
@@ -209,6 +286,7 @@ async function generateOne({ topic, difficulty, existing }) {
       return outcome.problem;
     } catch (e) {
       console.log(`  rejected: ${e.message}`);
+      archetypeFailures++;
     }
   }
   return null;
@@ -219,7 +297,8 @@ async function main() {
   let written = 0;
   for (let i = 0; i < COUNT; i++) {
     const topic = process.env.TOPIC?.trim() || pick(TOPICS);
-    const difficulty = DIFFICULTIES.includes(process.env.DIFFICULTY) ? process.env.DIFFICULTY : pick(["easy", "medium", "medium", "hard"]);
+    const pinned = process.env.ARCHETYPE?.trim();
+    const difficulty = pinned ? "hard" : DIFFICULTIES.includes(process.env.DIFFICULTY) ? process.env.DIFFICULTY : pick(["easy", "medium", "medium", "hard"]);
     console.log(`[${i + 1}/${COUNT}] topic=${topic} difficulty=${difficulty} model=${MODEL}`);
     const problem = await generateOne({ topic, difficulty, existing });
     if (!problem) {
