@@ -97,7 +97,7 @@ export async function callOllama(prompt, options) {
     clearTimeout(timer);
   }
   if (timedOut) throw new Error(`ollama 호출이 ${Math.round(CALL_TIMEOUT_MS / 60_000)}분을 넘겨 중단 (${text.length}자 생성, ${Math.round((Date.now() - startedAt) / 1000)}s)`);
-  if (degenerated) throw new Error(`ollama 출력이 같은 토막을 반복함 (JSON 생성 퇴화, ${text.trim().length}자에서 중단)`);
+  if (degenerated) throw new Error(`ollama 출력이 같은 토막을 반복함 (JSON 생성 퇴화, ${text.trim().length}자에서 중단)\n    output ends with: ${JSON.stringify(text.trimEnd().slice(-120))}`);
   if (doneReason && doneReason !== "stop") throw new Error(`ollama 응답이 잘림 (done_reason=${doneReason}, ${text.length}자)`);
   if (!text) throw new Error("ollama 응답이 비어 있음");
   return text;

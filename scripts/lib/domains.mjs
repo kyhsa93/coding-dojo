@@ -67,6 +67,6 @@ export function pickDomain(env, random = Math.random) {
 /** Prompt lines that tell the model to set the problem in the domain. Empty when there is none. */
 export function domainBlock(domain) {
   if (!domain) return "";
-  return `- Setting: ${domain.label}. Tell the problem as a concrete, realistic scenario from this setting (for example: ${domain.scenarios}). Name the system and its resources, use the setting's real vocabulary, and make the function compute something an engineer there actually needs: a schedule, a count, a cost, a verdict, the final state. The computation stays self-contained: inputs are plain JSON values (arrays of records, strings, numbers), no real APIs, clocks or network. Include "${domain.tag}" in "tags".
+  return `- Setting: ${domain.label}. Tell the problem as a concrete, realistic scenario from this setting (for example: ${domain.scenarios}). Name the system and its resources, use the setting's real vocabulary, and make the function compute something an engineer there actually needs: a schedule, a count, a cost, a verdict, the final state. The computation stays self-contained: no real APIs, clocks or network. The parameters must still use the allowed types above, so encode records as parallel arrays (ids: string[], cpu: number[], memory: number[]), as rows (number[][]), or as one string per record ("n1 10 20"), never as an array of objects. Include "${domain.tag}" in "tags".
 `;
 }

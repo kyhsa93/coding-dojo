@@ -115,3 +115,11 @@ test("the spec prompt carries the setting too", () => {
   assert.match(p, /Setting: containers and orchestration/);
   assert.match(p, /Include "containers" in "tags"/);
 });
+
+test("buildSpec drops malformed examples and keeps the well-formed ones", () => {
+  const mixed = { ...specCandidate, examples: [{ input: { nums: [1] }, explanation: "객체" }, { input: [[1, 2]], explanation: "정상" }, "explanation"] };
+  const spec = buildSpec(mixed, { existingIds: new Set() });
+  assert.deepEqual(spec.examples, [{ input: [[1, 2]], explanation: "정상" }]);
+  assert.equal(spec.droppedExamples.length, 2);
+  assert.throws(() => buildSpec({ ...specCandidate, examples: [{ input: { nums: [1] } }] }, { existingIds: new Set() }), /example input malformed/);
+});
