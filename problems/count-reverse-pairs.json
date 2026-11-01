@@ -1,0 +1,194 @@
+{
+  "id": "count-reverse-pairs",
+  "title": "역전 쌍의 개수 세기",
+  "difficulty": "hard",
+  "tags": [
+    "recursion"
+  ],
+  "statement": "정렬되지 않은 정수 배열에서 역전 쌍의 개수를 계산하세요. 역전 쌍은 i < j 이지만 nums[i] > nums[j]인 (i, j) 인덱스 쌍입니다. 배열의 길이가 최대 200,000일 수 있으므로 O(n^2) 알고리즘은 너무 느립니다. O(n log n)의 병합 정렬 스타일 분할 정복 알고리즘을 사용하세요. 예를 들어, nums = [3, 1, 4, 2], 역전 쌍은 (3,1), (3,2), (4,2)로 총 3개입니다.",
+  "functionName": "countReversePairs",
+  "params": [
+    {
+      "name": "nums",
+      "type": "number[]"
+    }
+  ],
+  "returnType": "number",
+  "starterCode": {
+    "javascript": "function countReversePairs(nums) {\n  // 여기에 코드를 작성하세요\n}\n",
+    "typescript": "function countReversePairs(nums: number[]): number {\n  // 여기에 코드를 작성하세요\n}\n",
+    "python": "def countReversePairs(nums: list[int]) -> int:\n    # 여기에 코드를 작성하세요\n    pass\n"
+  },
+  "examples": [
+    {
+      "input": [
+        [
+          3,
+          1,
+          4,
+          2
+        ]
+      ],
+      "expected": 3,
+      "explanation": "역전 쌍은 (3,1), (3,2), (4,2)로 총 3개입니다."
+    },
+    {
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      "expected": 0,
+      "explanation": "배열이 이미 정렬되어 있으므로 역전 쌍은 없습니다."
+    },
+    {
+      "input": [
+        [
+          4,
+          3,
+          2,
+          1
+        ]
+      ],
+      "expected": 6,
+      "explanation": "모든 인접한 쌍이 역전 쌍이므로 총 6개입니다."
+    }
+  ],
+  "tests": [
+    {
+      "input": [
+        [
+          3,
+          1,
+          4,
+          2
+        ]
+      ],
+      "expected": 3
+    },
+    {
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          4,
+          3,
+          2,
+          1
+        ]
+      ],
+      "expected": 6
+    },
+    {
+      "input": [
+        [
+          [],
+          [
+            1
+          ]
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          -5,
+          -3,
+          -1,
+          0,
+          2,
+          4
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          5,
+          4,
+          3,
+          2,
+          1,
+          0,
+          -1,
+          -2,
+          -3,
+          -4,
+          -5
+        ]
+      ],
+      "expected": 55
+    },
+    {
+      "input": [
+        [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          1,
+          3,
+          5,
+          7,
+          9,
+          2,
+          4,
+          6,
+          8,
+          10
+        ]
+      ],
+      "expected": 10
+    }
+  ],
+  "hints": [
+    "역전 쌍을 세는 문제는 병합 정렬을 사용해 O(n log n) 시간에 해결할 수 있습니다.",
+    "병합 과정에서 왼쪽 배열의 요소가 오른쪽 배열의 요소보다 큰 경우, 왼쪽 배열의 나머지 요소들 모두가 현재 오른쪽 요소보다 크다는 점을 활용하세요.",
+    "재귀적으로 분할하고 병합하면서 역전 쌍의 수를 누적해주세요."
+  ],
+  "solution": "function countReversePairs(nums) {let count=0;function mergeSort(arr){if(arr.length<=1)return arr;const mid=Math.floor(arr.length/2);const left=mergeSort(arr.slice(0,mid));const right=mergeSort(arr.slice(mid));let i=0,j=0,k=0;while(i<left.length&&j<right.length){if(left[i]<=right[j]){arr[k++]=left[i++];}else{arr[k++]=right[j++];count+=left.length-i;}}while(i<left.length)arr[k++]=left[i++];while(j<right.length)arr[k++]=right[j++];return arr;}mergeSort(nums.slice());return count;}",
+  "createdAt": "2026-11-01",
+  "source": "ollama/qwen3:14b",
+  "judge": {
+    "archetype": "sorting-merge-count",
+    "performance": {
+      "solutionMs": 98,
+      "bruteForce": "timeout>2000ms",
+      "largeInputArgs": [
+        "array[200000]"
+      ],
+      "includedAsTest": false,
+      "largeInput": "function largeInput() { let s = 12345; const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648; let nums = []; for (let i = 0; i < 200000; i++) { nums.push(Math.floor(rnd() * 2000000) - 1000000); } return [nums]; }"
+    },
+    "difficulty": "hard",
+    "algorithm": "병합 정렬 스타일 분할 정복을 사용하여 역전 쌍의 개수를 계산",
+    "reason": "O(n log n) 복잡도를 달성하기 위해 merge-sort 기반 알고리즘을 사용하며, 역전 쌍을 계산하는 로직이 포함되어 있음",
+    "usesTechnique": true,
+    "crossChecked": true
+  }
+}
