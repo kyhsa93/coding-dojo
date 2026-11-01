@@ -27,8 +27,11 @@ try {
 } catch {
   slotDirs = [];
 }
+// download-artifact puts each artifact in its own candidate-<slot> folder when several match the pattern,
+// but a single match is extracted into the target folder itself (run 41312290985 lost its one problem to this).
+if (slotDirs.length === 0 && (await stat(path.join(dir, "problems")).catch(() => null))?.isDirectory()) slotDirs = ["."];
 for (const d of slotDirs) {
-  const slot = d.replace(/^candidate-/, "");
+  const slot = d === "." ? "single" : d.replace(/^candidate-/, "");
   const base = path.join(dir, d);
   let report = "";
   try {

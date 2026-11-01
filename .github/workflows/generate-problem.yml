@@ -27,6 +27,10 @@ on:
         description: "hard 아키타입 키 (scripts/lib/archetypes.mjs). 지정하면 모든 슬롯이 그 아키타입으로 hard 를 생성"
         type: string
         default: ""
+      model:
+        description: "Ollama 모델 태그. 러너 메모리 15GB 안에 들어가야 한다(14b q4 = 약 9GB)"
+        type: string
+        default: "qwen3:14b"
       runner:
         description: "러너. ARM 이 x64 보다 생성이 약 30% 빠르다(3.5 vs 2.7 tok/s, 2026-11-01 측정). 둘 다 공개 저장소에서 무료"
         type: choice
@@ -45,12 +49,13 @@ permissions:
   contents: write
   pull-requests: write
 
+# 같은 브랜치의 실행만 줄 세운다. 다른 브랜치에서 띄운 실험 실행은 main 의 실행과 겹쳐도 된다.
 concurrency:
-  group: generate-problem
+  group: generate-problem-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  OLLAMA_MODEL: qwen3:14b
+  OLLAMA_MODEL: ${{ inputs.model || 'qwen3:14b' }}
   OLLAMA_THINK: "false"
   COUNT: ${{ inputs.count || 3 }}
   TOPIC: ${{ inputs.topic }}
@@ -72,8 +77,6 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: main
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22"
@@ -101,8 +104,6 @@ jobs:
       COUNT: 1
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: main
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -136,7 +137,12 @@ jobs:
             curl -sf http://127.0.0.1:11434/api/version > /dev/null && break
             sleep 1
           done
-          ollama pull "$OLLAMA_MODEL"
+          # 레지스트리가 가끔 503 을 돌려준다(2026-11-01 실행에서 슬롯 하나가 여기서 죽었다). 잠시 쉬고 다시 받는다.
+          for i in 1 2 3 4; do
+            ollama pull "$OLLAMA_MODEL" && break
+            [ "$i" = 4 ] && exit 1
+            echo "pull 실패, ${i}번째 재시도 전 30초 대기"; sleep 30
+          done
 
       - name: 문제 생성
         if: env.MODE == 'generate'
@@ -190,14 +196,13 @@ jobs:
           if-no-files-found: error
 
   # 수집: 슬롯이 올린 후보를 모아 중복을 거르고 PR 하나를 연다. Ollama 는 필요 없다.
+  # PR 의 base 는 실행한 브랜치다(예약 실행은 main). 실험 브랜치의 결과가 main 으로 향하지 않게 한다.
   collect:
     needs: [plan, generate]
     if: always() && needs.plan.result == 'success' && !inputs.audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: main
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -227,6 +232,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           branch="problems/run-${{ github.run_id }}"
+          base="$GITHUB_REF_NAME"
           git checkout -b "$branch"
           git add problems
           if git diff --cached --quiet; then
@@ -241,5 +247,9 @@ jobs:
           fi
           git commit -m "$title"
           git push origin "$branch"
-          gh pr create --base main --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md"
+          if ! gh pr create --base "$base" --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md"; then
+            echo "::error::PR 생성 실패. 브랜치 $branch 는 push 되어 있다. 'GitHub Actions is not permitted to create or approve pull requests' 라면 저장소 Settings > Actions > General > Workflow permissions 에서 'Allow GitHub Actions to create and approve pull requests' 를 켠다."
+            echo "수동 PR: ${{ github.server_url }}/${{ github.repository }}/compare/$base...$branch"
+            exit 1
+          fi
           cat "$RUNNER_TEMP/pr-body.md" >> "$GITHUB_STEP_SUMMARY"

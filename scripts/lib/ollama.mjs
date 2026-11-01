@@ -36,22 +36,23 @@ export async function callOllama(prompt, options) {
     timedOut = true;
     controller.abort();
   }, CALL_TIMEOUT_MS);
-  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal: controller.signal,
-    body: JSON.stringify({
-      model: MODEL,
-      prompt,
-      stream: true,
-      format: "json",
-      options,
-      ...(DISABLE_THINKING ? { think: false } : {}),
-    }),
-  });
+  const request = (think) =>
+    fetch(`${OLLAMA_URL}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({ model: MODEL, prompt, stream: true, format: "json", options, ...(think ? { think: false } : {}) }),
+    });
+  let res = await request(DISABLE_THINKING);
   if (!res.ok) {
-    clearTimeout(timer);
-    throw new Error(`ollama http ${res.status}`);
+    // The body names the cause ("model not found", "does not support thinking"), which the status alone hides.
+    const body = await res.text().catch(() => "");
+    // A model without a thinking mode (qwen2.5-coder) may refuse the flag altogether; it is a no-op there anyway.
+    if (DISABLE_THINKING && /think/i.test(body)) res = await request(false);
+    if (!res.ok) {
+      clearTimeout(timer);
+      throw new Error(`ollama http ${res.status}: ${body.slice(0, 300)}`);
+    }
   }
   const decoder = new TextDecoder();
   let pending = "";
