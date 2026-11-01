@@ -255,37 +255,27 @@ async function generateOne({ topic, difficulty, existing }) {
       let built = buildProblem(candidate, { existingIds, source: `ollama/${MODEL}` });
 
       if (archetype) {
-        try {
-          built = applyPerfGate(built, candidate, archetype);
-          const perf = built.judge.performance;
-          console.log(`  perf gate: solution ${perf.solutionMs}ms, bruteForce ${perf.bruteForce} on (${perf.largeInputArgs.join(", ")})${perf.includedAsTest ? ", large input added as a test" : ""}`);
-        } catch (e) {
-          feedback = e.message;
-          throw e;
-        }
+        built = applyPerfGate(built, candidate, archetype);
+        const perf = built.judge.performance;
+        console.log(`  perf gate: solution ${perf.solutionMs}ms, bruteForce ${perf.bruteForce} on (${perf.largeInputArgs.join(", ")})${perf.includedAsTest ? ", large input added as a test" : ""}`);
       }
 
-      try {
-        await crossVerify(built, console.log);
-      } catch (e) {
-        feedback = e.message;
-        throw e;
-      }
+      await crossVerify(built, console.log);
 
       const judgement = await judgeProblem(built, archetype);
       if (entry) entry.algorithm = judgement.algorithm;
       console.log(`  judge: ${judgement.difficulty} (${judgement.algorithm})${judgement.usesTechnique !== undefined ? `, usesTechnique=${judgement.usesTechnique}` : ""}`);
       const outcome = reconcileDifficulty(built, judgement, { objective: Boolean(archetype) });
-      if (outcome.action === "reject") {
-        feedback = outcome.reason;
-        throw new Error(`difficulty: ${outcome.reason}`);
-      }
+      if (outcome.action === "reject") throw new Error(`difficulty: ${outcome.reason}`);
       if (outcome.action === "relabel") console.log(`  relabeled ${built.difficulty} -> ${outcome.problem.difficulty}`);
       outcome.problem.judge.crossChecked = true;
       rejected.pop();
       return outcome.problem;
     } catch (e) {
       console.log(`  rejected: ${e.message}`);
+      // Every rejection reaches the next attempt. Shape errors ("test has 2 args, expected 1", "tests
+      // missing") used to be silent, so the model repeated the same mistake attempt after attempt.
+      feedback = e.message;
       archetypeFailures++;
     }
   }
