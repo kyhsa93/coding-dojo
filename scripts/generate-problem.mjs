@@ -12,7 +12,8 @@
  *     is corrected. Two levels off (easy<->hard): rejected.
  * A rejected candidate's reason is fed into the next attempt's prompt.
  *
- * Env: OLLAMA_URL, OLLAMA_MODEL, OLLAMA_THINK=false, COUNT, TOPIC, DIFFICULTY, MAX_ATTEMPTS
+ * Env: OLLAMA_URL, OLLAMA_MODEL, OLLAMA_THINK=false, COUNT, TOPIC, DIFFICULTY, MAX_ATTEMPTS,
+ *      GENERATION_BUDGET_MINUTES (no new attempt or stage call starts after this; 0 = unlimited)
  */
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -25,6 +26,13 @@ import { buildBruteForcePrompt, buildLargeInputPrompt, parseFunctionSource } fro
 
 const COUNT = Math.max(1, Number(process.env.COUNT ?? 1));
 const MAX_ATTEMPTS = Math.max(1, Number(process.env.MAX_ATTEMPTS ?? 4));
+const BUDGET_MS = Math.max(0, Number(process.env.GENERATION_BUDGET_MINUTES ?? 0)) * 60_000;
+const DEADLINE = BUDGET_MS ? Date.now() + BUDGET_MS : Infinity;
+const budgetExhausted = () => Date.now() > DEADLINE;
+/** Thrown before a model call once the budget is gone, so the attempt ends and the loop stops instead of overrunning the job. */
+function ensureBudget(stage) {
+  if (budgetExhausted()) throw new Error(`time budget exhausted before ${stage} (${process.env.GENERATION_BUDGET_MINUTES} min)`);
+}
 const problemsDir = path.resolve(import.meta.dirname, "../problems");
 
 const TOPICS = [
@@ -113,6 +121,7 @@ export async function obtainBruteForce(problem, archetype, log = () => {}) {
   let feedback = null;
   for (let i = 0; i < STAGE_RETRIES; i++) {
     try {
+      ensureBudget("brute force");
       const raw = await callOllama(buildBruteForcePrompt(problem, archetype, feedback), { temperature: STAGE_TEMPERATURES[i], top_p: 0.9, num_predict: 2048 });
       const source = parseFunctionSource(extractJson(raw), "bruteForce");
       const check = checkBruteForce(problem, source);
@@ -137,6 +146,7 @@ export async function obtainLargeInput(problem, archetype, brute, log = () => {}
   let feedback = null;
   for (let i = 0; i < STAGE_RETRIES; i++) {
     try {
+      ensureBudget("large input");
       const raw = await callOllama(buildLargeInputPrompt(problem, archetype, feedback), { temperature: STAGE_TEMPERATURES[i], top_p: 0.9, num_predict: 2048 });
       const source = parseFunctionSource(extractJson(raw), "largeInput");
       const check = checkLargeInput(problem, brute, source);
@@ -237,6 +247,7 @@ export async function crossVerify(problem, log = () => {}) {
   const total = problem.examples.length + problem.tests.length;
   let last = null;
   for (const temperature of [0.3, 0.8]) {
+    ensureBudget("cross-check");
     const raw = await callOllama(buildCrossSolvePrompt(problem), { temperature, top_p: 0.9, num_predict: 4096 });
     const result = crossCheck(problem, parseCrossSolution(extractJson(raw)));
     if (result.ok) {
@@ -251,6 +262,7 @@ export async function crossVerify(problem, log = () => {}) {
 
 /** Second model pass: grade the real difficulty. Returns the judgement. */
 export async function judgeProblem(problem, archetype = null) {
+  ensureBudget("judge");
   const raw = await callOllama(buildJudgePrompt(problem, archetype ? { technique: archetype.technique } : {}), { temperature: 0, num_predict: 512 });
   return parseJudgement(extractJson(raw));
 }
@@ -280,6 +292,10 @@ async function generateOne({ topic, difficulty, existing }) {
   let archetypeFailures = 0;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const temperature = temperatures[attempt % temperatures.length];
+    if (budgetExhausted()) {
+      console.log(`  time budget exhausted (${process.env.GENERATION_BUDGET_MINUTES} min), no more attempts`);
+      break;
+    }
     if (!archetype || archetypeFailures >= ATTEMPTS_PER_ARCHETYPE) {
       archetype = chooseArchetype(topic, difficulty, usedArchetypes);
       archetypeFailures = 0;
@@ -324,6 +340,10 @@ async function main() {
   const existing = await existingProblems();
   let written = 0;
   for (let i = 0; i < COUNT; i++) {
+    if (budgetExhausted()) {
+      console.log(`time budget exhausted, skipping the remaining ${COUNT - i} slot(s)`);
+      break;
+    }
     const topic = process.env.TOPIC?.trim() || pick(TOPICS);
     const pinned = process.env.ARCHETYPE?.trim();
     const difficulty = pinned ? "hard" : DIFFICULTIES.includes(process.env.DIFFICULTY) ? process.env.DIFFICULTY : pick(["easy", "medium", "medium", "hard"]);
