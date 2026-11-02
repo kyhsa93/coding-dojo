@@ -1,18 +1,20 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { PYODIDE_BASE } from "./src/judge/pyodide.ts";
 
 /**
  * Content-Security-Policy for the built site. GitHub Pages cannot send headers, so it is a meta tag, and it reaches
  * the judge workers because they start from blob URLs and inherit it (src/judge/client.ts). Submitted code runs in
- * those workers: connect-src and script-src keep it from reaching any host but this site and the Pyodide CDN.
+ * those workers: connect-src and script-src keep it from reaching anything but this site and the one Pyodide release
+ * (the path, not the whole CDN, which would serve any npm package or GitHub file as importable code).
  * 'unsafe-eval' is the judge itself (new Function), 'wasm-unsafe-eval' is Pyodide, and 'unsafe-inline' styles are
  * CodeMirror's injected stylesheets. Build only: the dev server relies on inline scripts for hot reload.
  */
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
-  "connect-src 'self' https://cdn.jsdelivr.net",
+  `script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' ${PYODIDE_BASE}`,
+  `connect-src 'self' ${PYODIDE_BASE}`,
   "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",

@@ -1,9 +1,8 @@
 /// <reference lib="webworker" />
 import { lockDown } from "./lockdown.ts";
 import type { Post, RunMessage } from "./protocol";
+import { PYODIDE_BASE } from "./pyodide.ts";
 import { describeError, judgeEach, missingFunction, Output } from "./runner.ts";
-
-const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.mjs";
 
 interface PyProxy {
   (...args: unknown[]): unknown;
@@ -31,8 +30,8 @@ let py: Pyodide | undefined;
 async function boot() {
   post({ kind: "runtime", state: "loading" });
   try {
-    const mod = (await import(/* @vite-ignore */ PYODIDE_URL)) as { loadPyodide(o: { indexURL: string }): Promise<Pyodide> };
-    py = await mod.loadPyodide({ indexURL: PYODIDE_URL.replace(/pyodide\.mjs$/, "") });
+    const mod = (await import(/* @vite-ignore */ `${PYODIDE_BASE}pyodide.mjs`)) as { loadPyodide(o: { indexURL: string }): Promise<Pyodide> };
+    py = await mod.loadPyodide({ indexURL: PYODIDE_BASE });
   } catch (e) {
     post({ kind: "runtime", state: "failed", error: `Python 런타임을 불러오지 못했습니다: ${describeError(e)}` });
     return;

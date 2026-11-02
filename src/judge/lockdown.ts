@@ -22,6 +22,11 @@ const BLOCKED_GLOBALS = [
   "SharedWorker",
   "BroadcastChannel",
   "RTCPeerConnection",
+  // Chromium's legacy sandboxed file system persists per origin and would carry data from one run to the next.
+  "webkitRequestFileSystem",
+  "webkitRequestFileSystemSync",
+  "webkitResolveLocalFileSystemURL",
+  "webkitResolveLocalFileSystemSyncURL",
 ];
 
 function remove(target: object, name: string) {
@@ -33,7 +38,10 @@ function remove(target: object, name: string) {
 
 export function lockDown() {
   for (const name of BLOCKED_GLOBALS) remove(globalThis, name);
-  if (typeof navigator !== "undefined") remove(navigator, "storage");
+  if (typeof navigator !== "undefined") {
+    remove(navigator, "storage");
+    remove(navigator, "locks");
+  }
   // Replies go through a reference taken before this runs; submitted code cannot post look-alike messages.
   remove(globalThis, "postMessage");
 }

@@ -82,9 +82,10 @@ class Host {
         this.waiting = undefined;
         if (next) this.dispatch(next);
       } else {
-        const run = this.waiting;
+        // Also reaches a run dispatched just before a broken runtime reported itself.
+        const runs = [this.waiting, this.running];
         this.kill();
-        run?.fail({ kind: "load", message: msg.error });
+        for (const run of runs) run?.fail({ kind: "load", message: msg.error });
       }
       return;
     }
@@ -277,7 +278,12 @@ export function createJudge(config: JudgeConfig) {
   return {
     /** Starts the Python runtime download ahead of the first run. JavaScript workers start fast enough per run. */
     warmUp(language: Language) {
-      if (language === "python") hostFor("python");
+      if (language !== "python") return;
+      try {
+        hostFor("python");
+      } catch {
+        /* the run itself reports this */
+      }
     },
 
     /**
@@ -297,10 +303,15 @@ export function createJudge(config: JudgeConfig) {
           return;
         }
         signal?.addEventListener("abort", onAbort, { once: true });
-        const host = hostFor(req.language);
-        host.waiting?.cancel();
-        host.running?.cancel();
-        run.wait(host.state === "dead" ? hostFor(req.language) : host);
+        try {
+          const host = hostFor(req.language);
+          host.waiting?.cancel();
+          host.running?.cancel();
+          run.wait(host.state === "dead" ? hostFor(req.language) : host);
+        } catch (e) {
+          // new Worker can throw synchronously (blocked by policy); the promise still has to resolve.
+          run.fail({ kind: "load", message: `채점 환경을 시작하지 못했습니다: ${e instanceof Error ? e.message : String(e)}` });
+        }
       });
     },
   };

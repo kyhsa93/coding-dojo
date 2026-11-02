@@ -10,7 +10,7 @@
 
 ## 개발
 
-Node 24 이상(테스트가 TypeScript 파일을 타입 스트리핑으로 바로 실행한다).
+Node 22.18 이상(테스트가 TypeScript 파일을 타입 스트리핑으로 바로 실행한다).
 
 ```bash
 npm install
@@ -38,18 +38,18 @@ npm run build
 
 제출한 코드는 이 사이트 출처(`kyhsa93.github.io`) 의 Web Worker 에서 `new Function`(JS/TS) 또는 Pyodide(Python)로 실행된다. 워커는 DOM·localStorage 에 닿지 못하지만 보안 샌드박스는 아니다. 지금 막는 것:
 
-- 네트워크: 빌드한 페이지에 Content-Security-Policy 메타 태그를 넣고(`vite.config.ts`), 워커를 blob URL 에서 시작해 그 정책을 물려받게 한다(`src/judge/client.ts`). GitHub Pages 는 워커 스크립트에 CSP 헤더를 붙일 수 없어서 이 방식만 가능하다. `connect-src`·`script-src` 가 이 사이트와 Pyodide CDN 만 허용하므로 `fetch`·`import()` 로 다른 호스트에 데이터를 보낼 수 없다(Chromium 에서 CSP 를 끈 대조군과 비교해 확인).
-- 같은 출처의 저장소와 중첩 워커: 워커가 시작할 때(Python 은 런타임을 받은 뒤) `fetch`, `XMLHttpRequest`, `WebSocket`, `indexedDB`, `caches`, `navigator.storage`, `Worker`, `postMessage` 등을 지운다(`src/judge/lockdown.ts`). 전역 삭제는 우회될 수 있는 보조 수단이다.
+- 네트워크: 빌드한 페이지에 Content-Security-Policy 메타 태그를 넣고(`vite.config.ts`), 워커를 blob URL 에서 시작해 그 정책을 물려받게 한다(`src/judge/client.ts`). GitHub Pages 는 워커 스크립트에 CSP 헤더를 붙일 수 없어서 이 방식만 가능하다. `connect-src`·`script-src` 가 이 사이트와 Pyodide 배포 경로(`cdn.jsdelivr.net/pyodide/v0.27.7/full/`, CDN 전체가 아니다)만 허용하므로 `fetch`·`import()` 로 그 밖의 주소에 요청을 보낼 수 없다(Chromium 에서 CSP 를 끈 대조군과 비교해 확인).
+- 같은 출처의 저장소와 중첩 워커: 워커가 시작할 때(Python 은 런타임을 받은 뒤) `fetch`, `XMLHttpRequest`, `WebSocket`, `indexedDB`, `caches`, `navigator.storage`, `navigator.locks`, Chromium 의 옛 파일 시스템 API, `Worker`, `postMessage` 등을 지운다(`src/judge/lockdown.ts`). 전역 삭제는 우회될 수 있는 보조 수단이다.
 - 채점 조작: 워커는 기대값을 받지 않고 반환값만 돌려주며, 비교는 메인 스레드에서 한다. 응답은 실행마다 새로 만든 무작위 id 로만 받는다.
 - 무한 루프·과도한 실행: 테스트당·전체 시간 제한이 지나면 워커를 종료한다. 출력은 20,000자에서 자른다.
 
 남는 한계:
 
 - `kyhsa93.github.io` 는 블로그와 다른 하위 사이트가 함께 쓰는 출처다. 그 출처의 IndexedDB·Cache Storage 를 막는 것은 전역 삭제뿐이고, 이것은 브라우저가 보장하는 경계가 아니어서 우회 방법이 없다고 장담할 수 없다. 완전히 막으려면 채점을 별도 출처(다른 도메인의 iframe)로 옮겨야 하는데, 그러면 서비스 워커 캐시를 쓰는 오프라인 Python 채점을 다시 설계해야 해서 이번에는 하지 않았다.
-- 메모리 사용량 제한은 없다. 큰 배열을 만들면 워커가 죽을 수 있고, 그때는 시간 제한으로 끝난다.
+- 메모리 사용량 제한은 없다. 큰 배열을 만들면 보통 시간 제한으로 끝나지만, 메모리가 작은 기기에서는 탭 전체가 죽을 수 있다(작성 중인 코드는 입력할 때마다 저장되므로 남는다). 반환값 크기 제한도 없다.
 - Python 코드는 `import js` 로 같은 워커의 JavaScript 전역을 바꿔 같은 탭의 다음 Python 실행에 영향을 줄 수 있다. 자기 실행에만 영향을 주므로 그대로 둔다.
 - 해결 기록은 브라우저 localStorage 에만 있고 위조할 수 있다. 연습용 기록이지 인증이 아니다.
-- CSP 상속은 Chromium 에서 확인했다. Firefox·Safari 에서 상속되지 않으면 네트워크 차단은 위 전역 삭제에만 의존한다.
+- CSP 상속과 blob 워커의 오프라인 동작은 Chromium 에서만 확인했다. Firefox·Safari 에서 CSP 가 상속되지 않으면 `fetch` 류는 전역 삭제로만 막히고, 삭제로 막을 수 없는 `import()` 는 어느 호스트로든 열린다.
 - 개발 서버(`npm run dev`)에는 CSP 를 넣지 않는다(핫 리로드가 인라인 스크립트를 쓴다).
 
 ## 문제 파일

@@ -278,6 +278,31 @@ describe("runtime failures", () => {
     assert.equal(spawned.length, 2);
   });
 
+  it("fails a run dispatched just before the runtime reported itself broken", async () => {
+    const j = judge();
+    const a = j.run(request("python", 1, { timeoutMs: 200 }));
+    spawned[0].ready();
+    spawned[0].answer([0]);
+    await a;
+    const b = j.run(request("python", 1, { timeoutMs: 200 }));
+    spawned[0].reply({ kind: "runtime", state: "failed", error: "fatal" });
+    assert.deepEqual((await b).failure, { kind: "load", message: "fatal" });
+    assert.equal(spawned[0].terminated, true);
+  });
+
+  it("resolves when a worker cannot be created at all", async () => {
+    const j = createJudge({
+      spawn: () => {
+        throw new Error("blocked by policy");
+      },
+      loadTimeoutMs: () => 1000,
+    });
+    assert.doesNotThrow(() => j.warmUp("python"));
+    const r = await j.run(request("python", 1));
+    assert.equal(r.failure?.kind, "load");
+    assert.match(r.failure!.message, /blocked by policy/);
+  });
+
   it("treats a worker error before startup as a load failure", async () => {
     const j = judge();
     const p = j.run(request("javascript", 1));

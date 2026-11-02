@@ -34,7 +34,7 @@ function spawn(language: Language): WorkerLike {
       worker.onmessage = (ev) => onMessage(ev.data);
       worker.onerror = (ev) => {
         ev.preventDefault();
-        onError(ev.message || "워커 스크립트를 불러오지 못했습니다");
+        onError(ev.message || "워커 스크립트를 불러오지 못했습니다. 새 버전이 배포되었을 수 있으니 페이지를 새로 고쳐 주세요.");
       };
     },
   };
