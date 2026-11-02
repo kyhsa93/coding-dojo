@@ -62,7 +62,7 @@ export async function callOllama(prompt, options) {
   let pending = "";
   let text = "";
   let doneReason = null;
-  let degenerated = false;
+  let degenerated = null;
   let nextRepetitionCheck = REPETITION_WINDOW;
   const consume = (line) => {
     const trimmed = line.trim();
@@ -82,10 +82,9 @@ export async function callOllama(prompt, options) {
       nextRepetitionCheck = text.length + 50;
       repetitive = looksRepetitive(text);
     }
-    if (repetitive || /\s{200,}$/.test(text.slice(-MAX_TRAILING_WHITESPACE - 1))) {
-      degenerated = true;
-      controller.abort();
-    }
+    if (repetitive) degenerated = "같은 토막을 반복함";
+    else if (/\s{200,}$/.test(text.slice(-MAX_TRAILING_WHITESPACE - 1))) degenerated = "끝없는 공백으로 이어짐";
+    if (degenerated) controller.abort();
   };
   try {
     for await (const bytes of res.body) {
@@ -101,7 +100,7 @@ export async function callOllama(prompt, options) {
     clearTimeout(timer);
   }
   if (timedOut) throw new Error(`ollama 호출이 ${Math.round(CALL_TIMEOUT_MS / 60_000)}분을 넘겨 중단 (${text.length}자 생성, ${Math.round((Date.now() - startedAt) / 1000)}s)`);
-  if (degenerated) throw new Error(`ollama 출력이 같은 토막을 반복함 (JSON 생성 퇴화, ${text.trim().length}자에서 중단)\n    output ends with: ${JSON.stringify(text.trimEnd().slice(-120))}`);
+  if (degenerated) throw new Error(`ollama 출력이 ${degenerated} (JSON 생성 퇴화, ${text.trim().length}자에서 중단)\n    output ends with: ${JSON.stringify(text.trimEnd().slice(-120))}`);
   if (doneReason && doneReason !== "stop") throw new Error(`ollama 응답이 잘림 (done_reason=${doneReason}, ${text.length}자)`);
   if (!text) throw new Error("ollama 응답이 비어 있음");
   return text;
