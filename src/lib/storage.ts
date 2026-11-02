@@ -11,11 +11,13 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 
-function write(key: string, value: unknown) {
+/** Returns false when the browser refuses (private mode, quota, blocked storage). */
+function write(key: string, value: unknown): boolean {
   try {
     localStorage.setItem(PREFIX + key, JSON.stringify(value));
+    return true;
   } catch {
-    /* storage unavailable */
+    return false;
   }
 }
 
@@ -23,8 +25,8 @@ export function loadDraft(problemId: string, language: Language): string | null 
   return read<string | null>(`draft:${problemId}:${language}`, null);
 }
 
-export function saveDraft(problemId: string, language: Language, code: string) {
-  write(`draft:${problemId}:${language}`, code);
+export function saveDraft(problemId: string, language: Language, code: string): boolean {
+  return write(`draft:${problemId}:${language}`, code);
 }
 
 export function loadLanguage(): Language {
@@ -39,8 +41,10 @@ export function loadSolved(): Record<string, string> {
   return read<Record<string, string>>("solved", {});
 }
 
-export function markSolved(problemId: string) {
+/** Records the first time the problem was solved and returns that time (ISO string). */
+export function markSolved(problemId: string): string {
   const solved = loadSolved();
-  solved[problemId] = new Date().toISOString();
+  solved[problemId] ??= new Date().toISOString();
   write("solved", solved);
+  return solved[problemId];
 }

@@ -1,11 +1,43 @@
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { PYODIDE_BASE } from "./src/judge/pyodide.ts";
+
+/**
+ * Content-Security-Policy for the built site. GitHub Pages cannot send headers, so it is a meta tag, and it reaches
+ * the judge workers because they start from blob URLs and inherit it (src/judge/client.ts). Submitted code runs in
+ * those workers: connect-src and script-src keep it from reaching anything but this site and the one Pyodide release
+ * (the path, not the whole CDN, which would serve any npm package or GitHub file as importable code).
+ * 'unsafe-eval' is the judge itself (new Function), 'wasm-unsafe-eval' is Pyodide, and 'unsafe-inline' styles are
+ * CodeMirror's injected stylesheets. Build only: the dev server relies on inline scripts for hot reload.
+ */
+const CSP = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' ${PYODIDE_BASE}`,
+  `connect-src 'self' ${PYODIDE_BASE}`,
+  "worker-src 'self' blob:",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'none'",
+].join("; ");
+
+function contentSecurityPolicy(): Plugin {
+  return {
+    name: "content-security-policy",
+    apply: "build",
+    transformIndexHtml: () => [{ tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: CSP }, injectTo: "head-prepend" }],
+  };
+}
 
 export default defineConfig({
   base: "/coding-dojo/",
   plugins: [
     react(),
+    contentSecurityPolicy(),
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "apple-touch-icon.png"],

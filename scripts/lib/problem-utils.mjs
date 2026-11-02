@@ -131,6 +131,7 @@ export function validateShape(p) {
       if (t && !isJsonValue(t.input) || (t && !isJsonValue(t.expected))) errors.push(`${name}[${i}] contains non-JSON values`);
     });
   }
+  if (p.tolerance !== undefined && !(typeof p.tolerance === "number" && Number.isFinite(p.tolerance) && p.tolerance >= 0)) errors.push("tolerance must be a non-negative number");
   if (p.hints !== undefined && (!Array.isArray(p.hints) || !p.hints.every((h) => typeof h === "string"))) errors.push("hints must be a string array");
   return errors;
 }

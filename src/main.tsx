@@ -10,7 +10,8 @@ registerSW({ immediate: true });
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <HashRouter>
+    {/* The list's search box is bound to the URL; a transition would make it lag and break Korean IME composition. */}
+    <HashRouter useTransitions={false}>
       <App />
     </HashRouter>
   </StrictMode>,
