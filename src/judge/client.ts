@@ -1,76 +1,46 @@
-import type { Language, RunRequest, RunResponse, TestResult } from "../lib/types";
+import type { Language } from "../lib/types";
+import jsWorkerUrl from "./js.worker.ts?worker&url";
+import pythonWorkerUrl from "./python.worker.ts?worker&url";
+import { createJudge, type WorkerLike } from "./session.ts";
 
-type Progress = { kind: "test"; result: TestResult } | { kind: "done"; stdout: string } | { kind: "compileError"; message: string; stdout: string };
+export type { JudgeRequest, RunEvent, RunOptions } from "./session.ts";
 
-const workers = new Map<Language, Worker>();
+/** Python may need to download about 10 MB on its first run; JavaScript only has to start a worker. */
+export const LOAD_TIMEOUT_MS: Record<Language, number> = { javascript: 15_000, typescript: 15_000, python: 120_000 };
 
-function getWorker(language: Language): Worker {
-  let w = workers.get(language);
-  if (!w) {
-    w = new Worker(new URL("./runner.worker.ts", import.meta.url), { type: "module" });
-    workers.set(language, w);
+/**
+ * In the production build a worker starts from a one-line blob module that imports the real script. Workers
+ * started from blob URLs inherit the page's Content-Security-Policy (the meta tag vite.config.ts adds), which is
+ * the only way to put one on them: GitHub Pages cannot send a CSP header with the worker script.
+ */
+const blobUrls = new Map<string, string>();
+function workerUrl(src: string): string {
+  const absolute = new URL(src, location.href).href;
+  if (import.meta.env.DEV) return absolute;
+  let url = blobUrls.get(absolute);
+  if (!url) {
+    url = URL.createObjectURL(new Blob([`import ${JSON.stringify(absolute)};\n`], { type: "text/javascript" }));
+    blobUrls.set(absolute, url);
   }
-  return w;
+  return url;
 }
 
-function discardWorker(language: Language) {
-  workers.get(language)?.terminate();
-  workers.delete(language);
+function spawn(language: Language): WorkerLike {
+  const worker = new Worker(workerUrl(language === "python" ? pythonWorkerUrl : jsWorkerUrl), { type: "module", name: `judge-${language}` });
+  return {
+    post: (msg) => worker.postMessage(msg),
+    terminate: () => worker.terminate(),
+    listen(onMessage, onError) {
+      worker.onmessage = (ev) => onMessage(ev.data);
+      worker.onerror = (ev) => {
+        ev.preventDefault();
+        onError(ev.message || "워커 스크립트를 불러오지 못했습니다");
+      };
+    },
+  };
 }
 
-/** Pre-loads the Python runtime so the first run does not stall. */
-export function warmUp(language: Language) {
-  getWorker(language);
-}
+const judge = createJudge({ spawn, loadTimeoutMs: (language) => LOAD_TIMEOUT_MS[language] });
 
-export function runTests(req: Omit<RunRequest, "kind">, onProgress?: (r: TestResult) => void): Promise<RunResponse> {
-  const language = req.language;
-  // Python's first run has to download the runtime (~10 MB); give it room.
-  const firstTestBudget = language === "python" ? 90_000 : req.timeoutMs;
-  return new Promise((resolve) => {
-    const worker = getWorker(language);
-    const results: TestResult[] = [];
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const finish = (resp: RunResponse) => {
-      if (timer) clearTimeout(timer);
-      worker.onmessage = null;
-      worker.onerror = null;
-      resolve(resp);
-    };
-
-    const arm = (ms: number) => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        discardWorker(language);
-        const next = results.length;
-        const expected = req.tests[next]?.expected ?? null;
-        results.push({ index: next, status: "timeout", expected, error: `${req.timeoutMs}ms 안에 끝나지 않았습니다`, durationMs: ms });
-        for (let i = next + 1; i < req.tests.length; i++) {
-          results.push({ index: i, status: "timeout", expected: req.tests[i].expected, error: "이전 테스트 시간 초과로 건너뜀", durationMs: 0 });
-        }
-        finish({ kind: "result", results, stdout: "" });
-      }, ms);
-    };
-
-    worker.onmessage = (ev: MessageEvent<Progress>) => {
-      const msg = ev.data;
-      if (msg.kind === "test") {
-        results.push(msg.result);
-        onProgress?.(msg.result);
-        arm(req.timeoutMs);
-      } else if (msg.kind === "done") {
-        finish({ kind: "result", results, stdout: msg.stdout });
-      } else if (msg.kind === "compileError") {
-        finish({ kind: "result", results: [], stdout: msg.stdout, compileError: msg.message });
-      }
-    };
-    worker.onerror = (e) => {
-      discardWorker(language);
-      finish({ kind: "result", results, stdout: "", compileError: e.message || "worker error" });
-    };
-
-    arm(firstTestBudget);
-    worker.postMessage({ kind: "run", ...req } satisfies RunRequest);
-  });
-}
+export const runTests = judge.run;
+export const warmUp = judge.warmUp;
