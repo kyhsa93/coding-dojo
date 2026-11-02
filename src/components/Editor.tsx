@@ -2,7 +2,7 @@ import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, c
 import { javascript, javascriptLanguage } from "@codemirror/lang-javascript";
 import { python, pythonLanguage } from "@codemirror/lang-python";
 import { Prec } from "@codemirror/state";
-import { keymap } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 import CodeMirror from "@uiw/react-codemirror";
 import { useMemo } from "react";
 import { jsGlobalCompletion, jsMemberCompletion, pyMemberCompletion } from "../lib/completions";
@@ -23,6 +23,7 @@ const completionExtensions = [
   closeBrackets(),
   keymap.of([...closeBracketsKeymap, ...completionKeymap]),
   Prec.highest(keymap.of([{ key: "Tab", run: acceptCompletion }])),
+  EditorView.contentAttributes.of({ "aria-label": "코드 편집기" }),
 ];
 
 const jsCompletions = javascriptLanguage.data.of({ autocomplete: jsGlobalCompletion });
