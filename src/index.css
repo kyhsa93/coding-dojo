@@ -48,10 +48,11 @@ button.ghost { background: transparent; }
 
 .problem-table { width: 100%; border-collapse: collapse; }
 .problem-table th, .problem-table td { padding: 0.55rem 0.5rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
-.problem-table th { color: var(--muted); font-weight: 500; font-size: 0.85rem; }
+.problem-table th { color: var(--muted); font-weight: 500; font-size: 0.85rem; white-space: nowrap; }
+.problem-table td a { word-break: keep-all; overflow-wrap: anywhere; }
 .tags { display: flex; gap: 0.3rem; flex-wrap: wrap; }
 .tag { font-size: 0.75rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
-.badge { font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 999px; font-weight: 600; }
+.badge { font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 999px; font-weight: 600; white-space: nowrap; }
 .badge.easy { background: rgba(60, 207, 122, 0.15); color: var(--pass); }
 .badge.medium { background: rgba(255, 179, 71, 0.15); color: var(--warn); }
 .badge.hard { background: rgba(255, 92, 92, 0.15); color: var(--fail); }
