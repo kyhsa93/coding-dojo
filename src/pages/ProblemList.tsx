@@ -98,7 +98,7 @@ export default function ProblemList() {
               </td>
               <td className="tags">
                 {p.tags.map((t) => (
-                  <button key={t} className="tag" aria-pressed={tag === t} aria-label={`태그 ${t}로 거르기`} onClick={() => setFilter("tag", t)}>
+                  <button key={t} className="tag" aria-pressed={tag === t} aria-label={`태그 ${t}로 거르기`} onClick={() => setFilter("tag", tag === t ? "" : t)}>
                     {t}
                   </button>
                 ))}

@@ -41,6 +41,7 @@ export function lockDown() {
   if (typeof navigator !== "undefined") {
     remove(navigator, "storage");
     remove(navigator, "locks");
+    remove(navigator, "storageBuckets");
   }
   // Replies go through a reference taken before this runs; submitted code cannot post look-alike messages.
   remove(globalThis, "postMessage");

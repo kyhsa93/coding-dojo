@@ -39,7 +39,7 @@ npm run build
 제출한 코드는 이 사이트 출처(`kyhsa93.github.io`) 의 Web Worker 에서 `new Function`(JS/TS) 또는 Pyodide(Python)로 실행된다. 워커는 DOM·localStorage 에 닿지 못하지만 보안 샌드박스는 아니다. 지금 막는 것:
 
 - 네트워크: 빌드한 페이지에 Content-Security-Policy 메타 태그를 넣고(`vite.config.ts`), 워커를 blob URL 에서 시작해 그 정책을 물려받게 한다(`src/judge/client.ts`). GitHub Pages 는 워커 스크립트에 CSP 헤더를 붙일 수 없어서 이 방식만 가능하다. `connect-src`·`script-src` 가 이 사이트와 Pyodide 배포 경로(`cdn.jsdelivr.net/pyodide/v0.27.7/full/`, CDN 전체가 아니다)만 허용하므로 `fetch`·`import()` 로 그 밖의 주소에 요청을 보낼 수 없다(Chromium 에서 CSP 를 끈 대조군과 비교해 확인).
-- 같은 출처의 저장소와 중첩 워커: 워커가 시작할 때(Python 은 런타임을 받은 뒤) `fetch`, `XMLHttpRequest`, `WebSocket`, `indexedDB`, `caches`, `navigator.storage`, `navigator.locks`, Chromium 의 옛 파일 시스템 API, `Worker`, `postMessage` 등을 지운다(`src/judge/lockdown.ts`). 전역 삭제는 우회될 수 있는 보조 수단이다.
+- 같은 출처의 저장소와 중첩 워커: 워커가 시작할 때(Python 은 런타임을 받은 뒤) `fetch`, `XMLHttpRequest`, `WebSocket`, `indexedDB`, `caches`, `navigator.storage`, `navigator.storageBuckets`, `navigator.locks`, Chromium 의 옛 파일 시스템 API, `Worker`, `postMessage` 등을 지운다(`src/judge/lockdown.ts`). 전역 삭제는 우회될 수 있는 보조 수단이다.
 - 채점 조작: 워커는 기대값을 받지 않고 반환값만 돌려주며, 비교는 메인 스레드에서 한다. 응답은 실행마다 새로 만든 무작위 id 로만 받는다.
 - 무한 루프·과도한 실행: 테스트당·전체 시간 제한이 지나면 워커를 종료한다. 출력은 20,000자에서 자른다.
 

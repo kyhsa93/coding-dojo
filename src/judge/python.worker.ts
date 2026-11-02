@@ -64,6 +64,17 @@ function isSyntaxError(e: unknown): boolean {
 }
 
 function runPython(py: Pyodide, req: RunMessage) {
+  try {
+    execute(py, req);
+  } catch (e) {
+    // Thrown outside any submission code: the runtime itself is gone. Fails the run and replaces the worker.
+    post({ kind: "runtime", state: "failed", error: `Python 런타임이 손상되어 다시 시작합니다: ${describeError(e)}` });
+    return;
+  }
+  checkAlive(py);
+}
+
+function execute(py: Pyodide, req: RunMessage) {
   const out = new Output();
   py.setStdout({ batched: (t) => out.append(t + "\n") });
   py.setStderr({ batched: (t) => out.append(t + "\n") });
@@ -73,11 +84,7 @@ function runPython(py: Pyodide, req: RunMessage) {
   let fn: unknown;
   const stdout = () => {
     // print(..., end="") stays in Pyodide's line buffer until flushed and would otherwise surface in the next run.
-    try {
-      py.runPython("import sys\nsys.stdout.flush()\nsys.stderr.flush()");
-    } catch {
-      /* nothing to flush */
-    }
+    quietly(() => py.runPython("import sys\nsys.stdout.flush()\nsys.stderr.flush()"));
     return out.toString();
   };
   try {
@@ -96,14 +103,18 @@ function runPython(py: Pyodide, req: RunMessage) {
     judgeEach(req.id, req.inputs, post, (args) => callPython(py, call, args), pythonError);
     post({ id: req.id, kind: "done", stdout: stdout() });
   } finally {
-    if (isProxy(py, fn)) fn.destroy();
-    try {
-      ns.clear();
-    } catch {
-      /* the runtime is broken; checked below */
-    }
-    ns.destroy();
-    checkAlive(py);
+    // After a fatal error these throw too, and that must not keep checkAlive from running.
+    if (isProxy(py, fn)) quietly(() => (fn as PyProxy).destroy());
+    quietly(() => ns.clear());
+    quietly(() => ns.destroy());
+  }
+}
+
+function quietly(action: () => void) {
+  try {
+    action();
+  } catch {
+    /* the runtime is broken; checkAlive reports it */
   }
 }
 
@@ -125,7 +136,7 @@ function callPython(py: Pyodide, fn: PyProxy, args: unknown[]): unknown {
   }
 }
 
-/** After a fatal error (e.g. a JS stack overflow inside Pyodide) every later call fails; hand the worker back. */
+/** After a fatal error (e.g. os.abort()) every later call fails; hand the worker back. */
 function checkAlive(py: Pyodide) {
   try {
     py.runPython("1");

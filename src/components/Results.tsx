@@ -34,16 +34,10 @@ export default function Results({ response, partial, tests, live, mode, language
   if (live) {
     return (
       <div aria-busy="true">
-        <p className="status" role="status">
-          {live.phase === "loading" ? (
-            <>
-              Python 런타임을 내려받는 중… (처음 한 번, 약 10MB) · <Elapsed since={live.startedAt} />
-            </>
-          ) : (
-            <>
-              {label} 실행 중… {partial.length} / {live.total} · <Elapsed since={live.startedAt} />
-            </>
-          )}
+        <p className="status">
+          {/* The clock stays outside the live region: it changes ten times a second and would be read out. */}
+          <span role="status">{live.phase === "loading" ? "Python 런타임을 내려받는 중… (처음 한 번, 약 10MB)" : `${label} 실행 중… ${partial.length} / ${live.total}`}</span> ·{" "}
+          <Elapsed since={live.startedAt} />
         </p>
         <ResultList results={partial} tests={tests} hidden={mode === "submit"} />
       </div>

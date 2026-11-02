@@ -98,13 +98,15 @@ summary { cursor: pointer; color: var(--muted); }
 .hints { margin: 0.8rem 0; }
 .save-state { min-width: 0; }
 .shortcuts { margin: 0; padding: 0.4rem 0.8rem; border-top: 1px solid var(--border); }
-.table-wrap { overflow-x: auto; }
 .stdout { max-height: 12rem; }
 
 @media (max-width: 900px) {
-  .problem { grid-template-columns: 1fr; min-height: auto; }
+  /* minmax(0, …): a long line of code must scroll inside the editor, not widen the page. */
+  .problem { grid-template-columns: minmax(0, 1fr); min-height: auto; }
   .statement { border-right: none; border-bottom: 1px solid var(--border); max-height: none; }
   .workspace { max-height: none; }
+  /* The column has no fixed height here, so growing panes would push the results off screen. */
+  .editor-wrap, .results-wrap { flex: 0 0 auto; }
   .editor-wrap { min-height: 320px; }
 }
 

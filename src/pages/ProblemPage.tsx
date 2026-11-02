@@ -235,7 +235,7 @@ function Workspace({ problem, language, onLanguageChange, onSolved, onShowSoluti
   const cancel = () => controllerRef.current?.abort();
 
   const reset = () => {
-    if (!confirm("작성한 코드를 초기 코드로 되돌릴까요? 바로 아래 '되돌리기'로 복구할 수 있습니다.")) return;
+    if (!confirm("작성한 코드를 초기 코드로 되돌릴까요? 다른 내용을 입력하기 전까지 '되돌리기'로 복구할 수 있습니다.")) return;
     setUndo(code);
     save(problem.starterCode[language]);
   };
