@@ -4,18 +4,53 @@
 
 - 사이트: https://kyhsa93.github.io/coding-dojo/
 - 언어: JavaScript, TypeScript(sucrase 로 브라우저 변환), Python(Pyodide, 브라우저 안에서 실행)
-- 채점: 문제마다 준비된 테스트 케이스를 Web Worker 에서 실행해 결과를 깊은 비교로 판정. 테스트당 3초 제한.
+- 채점: 문제마다 준비된 테스트 케이스를 Web Worker 에서 실행하고, 워커가 돌려준 반환값을 메인 스레드가 기대값과 비교한다(아래 「채점 규칙」). 테스트당 3초, 한 번 실행 전체 30초 제한. Python 런타임을 내려받는 시간은 제한에 들지 않는다.
 - PWA: 홈 화면에 설치할 수 있고, 앱 셸과 문제 데이터는 서비스 워커가 미리 캐시한다. Python 런타임(Pyodide)은 처음 한 번 CDN 에서 받은 뒤 캐시에서 쓰므로 그 뒤로는 오프라인에서도 채점된다. 아이콘은 `node scripts/make-icons.mjs` 로 다시 만든다.
 - 문제 추가: GitHub Actions 가 Ollama(qwen3:14b) 로 문제를 생성하고, 참고 풀이를 실제로 실행해 테스트 기대값을 만든 뒤 검증을 통과한 문제만 커밋.
 
 ## 개발
 
+Node 24 이상(테스트가 TypeScript 파일을 타입 스트리핑으로 바로 실행한다).
+
 ```bash
 npm install
 npm run dev        # http://localhost:5173/coding-dojo/
-npm test           # problems/*.json 스키마 + 참고 풀이 검증
+npm test           # problems/*.json 스키마 + 참고 풀이 검증, scripts/lib 와 tests/ 의 테스트
 npm run build
 ```
+
+`tests/` 는 비교 규칙(`deepEqual.test.ts`, 모든 문제에서 이전 비교와 판정이 같은지도 확인), JS/TS 변환, 러너, 워커 세션(가짜 워커로 요청·응답 매핑, 취소, 시간 제한, 런타임 로딩 실패·재시도), 실제 `worker_threads` 로 돌리는 JS/TS 통합 테스트(무한 루프, 동시 실행, 전역 오염)다. Python(Pyodide)은 Node 테스트에 없고 브라우저에서 확인한다.
+
+## 채점 규칙
+
+- 같은 실행 안의 테스트는 순서대로 돌고, 각 테스트는 입력의 복사본을 받는다.
+- JavaScript/TypeScript 는 실행마다 새 워커에서 돈다. 전역이나 프로토타입을 고쳐도 다음 실행에 남지 않는다. Python 은 런타임(Pyodide)을 다시 띄우는 데 몇 초가 걸려 워커를 재사용하되, 제출마다 새 이름공간에서 실행하므로 이전 제출의 함수·변수가 보이지 않는다(`sys.modules` 와 `sys.setrecursionlimit` 같은 인터프리터 전체 상태는 남는다).
+- JavaScript/TypeScript 는 Sucrase 로 변환한다. TypeScript 문법, `export`/`export default`, `import type` 은 그대로 쓸 수 있고, 외부 모듈 `import` 는 모듈 이름을 담은 오류가 된다. 문법 오류는 줄·열을 표시한다.
+- 비교(`src/lib/deepEqual.ts`):
+  - 정수끼리는 정확히 비교한다. 2^53 을 넘는 정수(Python 큰 정수)는 기대값이 JSON 숫자라 그 이상 정밀할 수 없으므로 double 정밀도로 비교한다.
+  - 정수가 아닌 수는 절대 오차 1e-6 까지 같다고 본다. 문제 파일의 `tolerance` 로 바꿀 수 있고 0 이면 정확히 비교한다. 둘 다 정수가 아닐 때만 크기의 1e-9 배 상대 오차도 허용한다.
+  - NaN, Infinity 는 자기 자신과만 같다(기대값은 유한한 JSON 이라 이 값을 돌려주면 항상 틀린다).
+  - `undefined` 와 `null` 은 같게 본다(return 이 없는 함수는 null 을 돌려준 것으로 본다).
+  - 배열은 원소 순서대로 비교하고 객체와는 같지 않다. 객체는 키 집합과 값으로 비교한다. Set 은 삽입 순서대로 배열로, Map 은 키를 문자열로 바꾼 객체로 바꿔 비교한다. 순환 참조가 있는 반환값은 그 테스트의 오류가 된다.
+- 시간 제한에 걸리면 그 테스트는 「시간 초과」, 뒤의 테스트는 「실행 안 함」이 되고 워커는 종료된다. 실행 중에 「중단」을 누르거나 문제를 떠나도 같은 방식으로 멈춘다.
+
+## 실행 환경과 보안
+
+제출한 코드는 이 사이트 출처(`kyhsa93.github.io`) 의 Web Worker 에서 `new Function`(JS/TS) 또는 Pyodide(Python)로 실행된다. 워커는 DOM·localStorage 에 닿지 못하지만 보안 샌드박스는 아니다. 지금 막는 것:
+
+- 네트워크: 빌드한 페이지에 Content-Security-Policy 메타 태그를 넣고(`vite.config.ts`), 워커를 blob URL 에서 시작해 그 정책을 물려받게 한다(`src/judge/client.ts`). GitHub Pages 는 워커 스크립트에 CSP 헤더를 붙일 수 없어서 이 방식만 가능하다. `connect-src`·`script-src` 가 이 사이트와 Pyodide CDN 만 허용하므로 `fetch`·`import()` 로 다른 호스트에 데이터를 보낼 수 없다(Chromium 에서 CSP 를 끈 대조군과 비교해 확인).
+- 같은 출처의 저장소와 중첩 워커: 워커가 시작할 때(Python 은 런타임을 받은 뒤) `fetch`, `XMLHttpRequest`, `WebSocket`, `indexedDB`, `caches`, `navigator.storage`, `Worker`, `postMessage` 등을 지운다(`src/judge/lockdown.ts`). 전역 삭제는 우회될 수 있는 보조 수단이다.
+- 채점 조작: 워커는 기대값을 받지 않고 반환값만 돌려주며, 비교는 메인 스레드에서 한다. 응답은 실행마다 새로 만든 무작위 id 로만 받는다.
+- 무한 루프·과도한 실행: 테스트당·전체 시간 제한이 지나면 워커를 종료한다. 출력은 20,000자에서 자른다.
+
+남는 한계:
+
+- `kyhsa93.github.io` 는 블로그와 다른 하위 사이트가 함께 쓰는 출처다. 그 출처의 IndexedDB·Cache Storage 를 막는 것은 전역 삭제뿐이고, 이것은 브라우저가 보장하는 경계가 아니어서 우회 방법이 없다고 장담할 수 없다. 완전히 막으려면 채점을 별도 출처(다른 도메인의 iframe)로 옮겨야 하는데, 그러면 서비스 워커 캐시를 쓰는 오프라인 Python 채점을 다시 설계해야 해서 이번에는 하지 않았다.
+- 메모리 사용량 제한은 없다. 큰 배열을 만들면 워커가 죽을 수 있고, 그때는 시간 제한으로 끝난다.
+- Python 코드는 `import js` 로 같은 워커의 JavaScript 전역을 바꿔 같은 탭의 다음 Python 실행에 영향을 줄 수 있다. 자기 실행에만 영향을 주므로 그대로 둔다.
+- 해결 기록은 브라우저 localStorage 에만 있고 위조할 수 있다. 연습용 기록이지 인증이 아니다.
+- CSP 상속은 Chromium 에서 확인했다. Firefox·Safari 에서 상속되지 않으면 네트워크 차단은 위 전역 삭제에만 의존한다.
+- 개발 서버(`npm run dev`)에는 CSP 를 넣지 않는다(핫 리로드가 인라인 스크립트를 쓴다).
 
 ## 문제 파일
 
@@ -27,6 +62,7 @@ npm run build
 | `starterCode` | 언어별 초기 코드 |
 | `examples` | 화면에 보여 주는 예제 (입력, 기대값, 설명) |
 | `tests` | 채점용 테스트 (입력, 기대값). 최소 6개 |
+| `tolerance` | (선택) 정수가 아닌 수의 허용 절대 오차. 기본 1e-6, 0 이면 정확히 비교 |
 | `solution` | JavaScript 참고 풀이. `npm test` 가 이 풀이로 모든 테스트를 다시 실행해 기대값과 일치하는지 확인 |
 
 직접 추가할 때는 `solution` 과 입력만 쓰고 기대값은 풀이를 실행해 채우는 것을 권장. 예: `scripts/generate-problem.mjs` 의 `buildProblem` 과 같은 방식.
