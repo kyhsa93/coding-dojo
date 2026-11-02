@@ -84,6 +84,7 @@ summary { cursor: pointer; color: var(--muted); }
 .status { font-weight: 600; margin: 0 0 0.5rem; }
 .status.pass { color: var(--pass); }
 .status.fail { color: var(--fail); }
+.status.idle { color: var(--muted); font-weight: 400; }
 .results { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 .result { border: 1px solid var(--border); border-left-width: 4px; border-radius: 6px; padding: 0.4rem 0.6rem; background: var(--panel-2); }
 .result.pass { border-left-color: var(--pass); }

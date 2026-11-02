@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "node scripts/validate-problems.mjs && node --test \"scripts/lib/*.test.mjs\" \"tests/*.test.ts\"",
     "generate": "node scripts/generate-problem.mjs",
-    "judge": "node scripts/judge-problems.mjs"
+    "judge": "node scripts/judge-problems.mjs",
+    "e2e": "node e2e/run.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.4",
@@ -31,6 +32,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "oxlint": "^1.89.0",
+    "playwright": "1.62.1",
     "typescript": "~7.0.2",
     "vite": "^8.3.5",
     "vite-plugin-pwa": "^2.0.0"

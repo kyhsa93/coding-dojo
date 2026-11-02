@@ -17,9 +17,10 @@ npm install
 npm run dev        # http://localhost:5173/coding-dojo/
 npm test           # problems/*.json 스키마 + 참고 풀이 검증, scripts/lib 와 tests/ 의 테스트
 npm run build
+npm run e2e        # 빌드 결과를 띄워 브라우저로 확인(Playwright, 처음엔 npx playwright install chromium)
 ```
 
-`tests/` 는 비교 규칙(`deepEqual.test.ts`, 모든 문제에서 이전 비교와 판정이 같은지도 확인), JS/TS 변환, 러너, 워커 세션(가짜 워커로 요청·응답 매핑, 취소, 시간 제한, 런타임 로딩 실패·재시도), 실제 `worker_threads` 로 돌리는 JS/TS 통합 테스트(무한 루프, 동시 실행, 전역 오염)다. Python(Pyodide)은 Node 테스트에 없고 브라우저에서 확인한다.
+`tests/` 는 비교 규칙(`deepEqual.test.ts`, 모든 문제에서 이전 비교와 판정이 같은지도 확인), JS/TS 변환, 러너, 워커 세션(가짜 워커로 요청·응답 매핑, 취소, 시간 제한, 런타임 로딩 실패·재시도), 실제 `worker_threads` 로 돌리는 JS/TS 통합 테스트(무한 루프, 동시 실행, 전역 오염)다. Python(Pyodide)은 Node 테스트에 없고 `e2e/` 가 브라우저에서 확인한다. `e2e/` 는 JS/TS·Python 흐름, 네트워크 차단(CSP 를 끈 대조군과 비교), 오프라인, CDN 실패 뒤 재시도, 한글 조합 입력, 스크린리더 알림 영역, 키보드 포커스, 모바일 가로 넘침을 CI 에서 본다. `E2E_BASE=https://kyhsa93.github.io/coding-dojo/ npm run e2e` 면 운영 사이트를 본다.
 
 ## 채점 규칙
 
@@ -49,7 +50,7 @@ npm run build
 - 메모리 사용량 제한은 없다. 큰 배열을 만들면 보통 시간 제한으로 끝나지만, 메모리가 작은 기기에서는 탭 전체가 죽을 수 있다(작성 중인 코드는 입력할 때마다 저장되므로 남는다). 반환값 크기 제한도 없다.
 - Python 코드는 `import js` 로 같은 워커의 JavaScript 전역을 바꿔 같은 탭의 다음 Python 실행에 영향을 줄 수 있다. 자기 실행에만 영향을 주므로 그대로 둔다.
 - 해결 기록은 브라우저 localStorage 에만 있고 위조할 수 있다. 연습용 기록이지 인증이 아니다.
-- CSP 상속과 blob 워커의 오프라인 동작은 Chromium 에서만 확인했다. Firefox·Safari 에서 CSP 가 상속되지 않으면 `fetch` 류는 전역 삭제로만 막히고, 삭제로 막을 수 없는 `import()` 는 어느 호스트로든 열린다.
+- CSP 상속과 채점은 Chromium, Playwright Firefox·WebKit 에서 확인했다. 오프라인 동작은 Chromium 에서만 확인했고, 실제 Safari·iOS 는 확인하지 못했다. 어떤 브라우저에서 CSP 가 상속되지 않으면 `fetch` 류는 전역 삭제로만 막히고, 삭제로 막을 수 없는 `import()` 는 어느 호스트로든 열린다.
 - 개발 서버(`npm run dev`)에는 CSP 를 넣지 않는다(핫 리로드가 인라인 스크립트를 쓴다).
 
 ## 문제 파일

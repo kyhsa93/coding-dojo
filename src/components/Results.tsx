@@ -27,54 +27,61 @@ const FAILURE_TITLES: Record<RunFailure["kind"], string> = {
 };
 
 export default function Results({ response, partial, tests, live, mode, language, onShowSolution }: Props) {
-  if (!response && !live) {
-    return <p className="muted">예제 실행 또는 제출을 눌러 결과를 확인하세요.</p>;
-  }
   const label = mode === "submit" ? "채점" : "예제";
-  if (live) {
-    return (
-      <div aria-busy="true">
-        <p className="status">
-          {/* The clock stays outside the live region: it changes ten times a second and would be read out. */}
-          <span role="status">{live.phase === "loading" ? "Python 런타임을 내려받는 중… (처음 한 번, 약 10MB)" : `${label} 실행 중… ${partial.length} / ${live.total}`}</span> ·{" "}
-          <Elapsed since={live.startedAt} />
-        </p>
-        <ResultList results={partial} tests={tests} hidden={mode === "submit"} />
-      </div>
-    );
-  }
-  const res = response!;
-  if (res.failure) {
-    return (
-      <div>
-        <p className="status fail" role="status">
-          {FAILURE_TITLES[res.failure.kind]}
-        </p>
-        <pre className="error">{res.failure.message}</pre>
-        {res.failure.kind === "load" && language === "python" && <p className="muted small">다시 실행하면 런타임을 처음부터 다시 내려받습니다.</p>}
-        {res.stdout && <Stdout text={res.stdout} />}
-      </div>
-    );
-  }
-  const passed = res.results.filter((r) => r.status === "pass").length;
+  const res = live ? null : response;
+  const passed = res ? res.results.filter((r) => r.status === "pass").length : 0;
   const total = tests.length;
-  const all = passed === total && total > 0;
+  const all = !!res && !res.failure && passed === total && total > 0;
+
+  let tone = "";
+  let message = "예제 실행 또는 제출을 눌러 결과를 확인하세요.";
+  if (live) {
+    message = live.phase === "loading" ? "Python 런타임을 내려받는 중… (처음 한 번, 약 10MB)" : `${label} 실행 중… ${partial.length} / ${live.total}`;
+  } else if (res?.failure) {
+    tone = "fail";
+    message = FAILURE_TITLES[res.failure.kind];
+  } else if (res) {
+    tone = all ? "pass" : "fail";
+    message = `${res.cancelled ? `${label} 중단됨` : `${label} 결과`}: ${passed} / ${total} 통과${all && mode === "submit" ? " 🎉" : ""}`;
+  }
+
   return (
-    <div>
-      <p className={`status ${all ? "pass" : "fail"}`} role="status">
-        {res.cancelled ? `${label} 중단됨` : `${label} 결과`}: {passed} / {total} 통과
-        {all && mode === "submit" && " 🎉"}
+    <div aria-busy={!!live}>
+      {/*
+        The same element in every state: a live region is only read when it already exists before its text changes,
+        so swapping it at the moment of the verdict could silence the verdict. The clock stays outside it because it
+        changes ten times a second.
+      */}
+      <p className={`status ${tone} ${!live && !res ? "idle" : ""}`}>
+        <span role="status">{message}</span>
+        {live && (
+          <>
+            {" · "}
+            <Elapsed since={live.startedAt} />
+          </>
+        )}
       </p>
-      <p className="muted small timing">{timing(res)}</p>
-      {all && mode === "submit" && (
-        <p>
-          <button className="ghost" onClick={onShowSolution}>
-            참고 풀이 보기
-          </button>
-        </p>
+      {live && <ResultList results={partial} tests={tests} hidden={mode === "submit"} />}
+      {res?.failure && (
+        <>
+          <pre className="error">{res.failure.message}</pre>
+          {res.failure.kind === "load" && language === "python" && <p className="muted small">다시 실행하면 런타임을 처음부터 다시 내려받습니다.</p>}
+        </>
       )}
-      <ResultList results={res.results} tests={tests} hidden={mode === "submit"} />
-      {res.stdout && <Stdout text={res.stdout} />}
+      {res && !res.failure && (
+        <>
+          <p className="muted small timing">{timing(res)}</p>
+          {all && mode === "submit" && (
+            <p>
+              <button className="ghost" onClick={onShowSolution}>
+                참고 풀이 보기
+              </button>
+            </p>
+          )}
+          <ResultList results={res.results} tests={tests} hidden={mode === "submit"} />
+        </>
+      )}
+      {res?.stdout && <Stdout text={res.stdout} />}
     </div>
   );
 }
