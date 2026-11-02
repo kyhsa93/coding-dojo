@@ -169,6 +169,20 @@ function Workspace({ problem, language, onLanguageChange, onSolved, onShowSoluti
   const [undo, setUndo] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const running = live !== null;
+  const stopRef = useRef<HTMLButtonElement>(null);
+  const examplesRef = useRef<HTMLButtonElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
+  const wasRunning = useRef(false);
+
+  // The run buttons and the stop button replace each other, which drops keyboard focus to the page. Focus follows
+  // the swap, unless it is somewhere else on purpose (the editor, after a shortcut).
+  useEffect(() => {
+    if (wasRunning.current === running) return;
+    wasRunning.current = running;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const target = running ? stopRef : mode === "submit" ? submitRef : examplesRef;
+    target.current?.focus({ preventScroll: true });
+  }, [running, mode]);
 
   useEffect(() => {
     warmUp(language);
@@ -285,13 +299,15 @@ function Workspace({ problem, language, onLanguageChange, onSolved, onShowSoluti
         </span>
         <span className="spacer" />
         {running ? (
-          <button onClick={cancel}>중단</button>
+          <button ref={stopRef} onClick={cancel}>
+            중단
+          </button>
         ) : (
           <>
-            <button onClick={() => execute("examples")} title="Ctrl/⌘ + Enter">
+            <button ref={examplesRef} onClick={() => execute("examples")} title="Ctrl/⌘ + Enter">
               예제 실행
             </button>
-            <button onClick={() => execute("submit")} className="primary" title="Ctrl/⌘ + Shift + Enter">
+            <button ref={submitRef} onClick={() => execute("submit")} className="primary" title="Ctrl/⌘ + Shift + Enter">
               제출
             </button>
           </>
