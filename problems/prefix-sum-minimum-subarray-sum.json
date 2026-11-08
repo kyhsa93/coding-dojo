@@ -1,0 +1,275 @@
+{
+  "id": "prefix-sum-minimum-subarray-sum",
+  "title": "접두사 합을 이용한 최소 부분 배열 합",
+  "difficulty": "easy",
+  "tags": [
+    "prefix-sum"
+  ],
+  "statement": "배열 `nums`가 주어졌을 때, 배열의 **연속적인 부분 배열** 중 **합이 가장 작은 것**의 **합**을 찾아주세요. 배열의 원소는 정수이며, 배열의 길이는 1 이상 100,000 이하입니다. 부분 배열은 **최소 1개의 원소**를 포함해야 하며, **같은 합이 여러 번 등장할 경우 그 중 하나만** 선택해도 됩니다.",
+  "functionName": "minimumSubarraySum",
+  "params": [
+    {
+      "name": "nums",
+      "type": "number[]"
+    }
+  ],
+  "returnType": "number",
+  "starterCode": {
+    "javascript": "function minimumSubarraySum(nums) {\n  // 여기에 코드를 작성하세요\n}\n",
+    "typescript": "function minimumSubarraySum(nums: number[]): number {\n  // 여기에 코드를 작성하세요\n}\n",
+    "python": "def minimumSubarraySum(nums: list[int]) -> int:\n    # 여기에 코드를 작성하세요\n    pass\n"
+  },
+  "examples": [
+    {
+      "input": [
+        [
+          10,
+          12,
+          15,
+          20,
+          25
+        ]
+      ],
+      "expected": 10,
+      "explanation": "합이 가장 작은 부분 배열은 [10]이며, 합은 10입니다."
+    },
+    {
+      "input": [
+        [
+          -1,
+          -2,
+          -3
+        ]
+      ],
+      "expected": -6,
+      "explanation": "합이 가장 작은 부분 배열은 [-1,-2,-3]이며, 합은 -6입니다."
+    },
+    {
+      "input": [
+        [
+          5
+        ]
+      ],
+      "expected": 5,
+      "explanation": "합이 가장 작은 부분 배열은 [5]이며, 합은 5입니다."
+    }
+  ],
+  "tests": [
+    {
+      "input": [
+        [
+          10,
+          12,
+          15,
+          20,
+          25
+        ]
+      ],
+      "expected": 10
+    },
+    {
+      "input": [
+        [
+          -1,
+          -2,
+          -3
+        ]
+      ],
+      "expected": -6
+    },
+    {
+      "input": [
+        [
+          5
+        ]
+      ],
+      "expected": 5
+    },
+    {
+      "input": [
+        [
+          0
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          -5,
+          1,
+          2,
+          -3
+        ]
+      ],
+      "expected": -5
+    },
+    {
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      ],
+      "expected": 1
+    },
+    {
+      "input": [
+        [
+          -10,
+          2,
+          3,
+          -2,
+          5,
+          10,
+          -15
+        ]
+      ],
+      "expected": -15
+    },
+    {
+      "input": [
+        [
+          1,
+          -2,
+          3,
+          -4,
+          5,
+          -6,
+          7,
+          -8
+        ]
+      ],
+      "expected": -8
+    },
+    {
+      "input": [
+        [
+          -1,
+          -2,
+          -3,
+          -4,
+          -5
+        ]
+      ],
+      "expected": -15
+    },
+    {
+      "input": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          1,
+          -1,
+          1,
+          -1,
+          1,
+          -1
+        ]
+      ],
+      "expected": -1
+    },
+    {
+      "input": [
+        [
+          100000
+        ]
+      ],
+      "expected": 100000
+    },
+    {
+      "input": [
+        [
+          -100000
+        ]
+      ],
+      "expected": -100000
+    },
+    {
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      ],
+      "expected": 1
+    },
+    {
+      "input": [
+        [
+          1,
+          -2,
+          3,
+          -4,
+          5,
+          -6,
+          7,
+          -8,
+          9,
+          -10
+        ]
+      ],
+      "expected": -10
+    },
+    {
+      "input": [
+        [
+          0,
+          -1,
+          0,
+          -1,
+          0,
+          -1,
+          0,
+          -1
+        ]
+      ],
+      "expected": -4
+    }
+  ],
+  "hints": [
+    "접두사 합을 계산해 부분 배열의 합을 빠르게 구할 수 있습니다.",
+    "현재까지의 최소 합과 비교하면서 최소 값을 갱신하세요.",
+    "부분 배열은 최소 1개의 원소를 포함해야 하므로, 공백 배열은 고려하지 않습니다."
+  ],
+  "solution": "function minimumSubarraySum(nums) { let currentSum = 0; let minSum = Infinity; for (let i = 0; i < nums.length; i++) { currentSum += nums[i]; if (currentSum < minSum) { minSum = currentSum; } if (currentSum > 0) { currentSum = 0; } } return minSum; }",
+  "createdAt": "2026-11-08",
+  "source": "ollama/qwen3:14b",
+  "judge": {
+    "difficulty": "easy",
+    "algorithm": "최소 부분 배열 합을 찾기 위해 단일 루프를 사용",
+    "reason": "단일 루프를 통해 최소 합을 갱신하며, 간단한 조건으로 초기화 및 업데이트를 수행",
+    "crossChecked": true
+  }
+}
