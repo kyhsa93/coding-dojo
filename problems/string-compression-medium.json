@@ -1,0 +1,195 @@
+{
+  "id": "string-compression-medium",
+  "title": "문자열 압축",
+  "difficulty": "easy",
+  "tags": [
+    "string-compression"
+  ],
+  "statement": "주어진 문자열을 반복된 문자를 카운트로 압축하여 반환하세요. 예를 들어, 'aabbaaa'는 'a2b2a3'로 압축됩니다. 단일 문자는 압축되지 않고, 빈 문자열은 빈 문자열을 반환합니다. 입력은 최대 1000자이며, 모든 문자는 소문자 알파벳입니다.",
+  "functionName": "compressString",
+  "params": [
+    {
+      "name": "input",
+      "type": "string[]"
+    }
+  ],
+  "returnType": "string",
+  "starterCode": {
+    "javascript": "function compressString(input) {\n  // 여기에 코드를 작성하세요\n}\n",
+    "typescript": "function compressString(input: string[]): string {\n  // 여기에 코드를 작성하세요\n}\n",
+    "python": "def compressString(input: list[str]) -> str:\n    # 여기에 코드를 작성하세요\n    pass\n"
+  },
+  "examples": [
+    {
+      "input": [
+        [
+          "aabbaaa"
+        ]
+      ],
+      "expected": "aabbaaa1",
+      "explanation": "반복된 문자를 카운트로 표기합니다."
+    },
+    {
+      "input": [
+        [
+          "a"
+        ]
+      ],
+      "expected": "a1",
+      "explanation": "단일 문자는 압축되지 않습니다."
+    },
+    {
+      "input": [
+        [
+          ""
+        ]
+      ],
+      "expected": "1",
+      "explanation": "빈 문자열은 빈 문자열을 반환합니다."
+    }
+  ],
+  "tests": [
+    {
+      "input": [
+        [
+          "aabbaaa"
+        ]
+      ],
+      "expected": "aabbaaa1"
+    },
+    {
+      "input": [
+        [
+          "a"
+        ]
+      ],
+      "expected": "a1"
+    },
+    {
+      "input": [
+        [
+          ""
+        ]
+      ],
+      "expected": "1"
+    },
+    {
+      "input": [
+        [
+          "abc"
+        ]
+      ],
+      "expected": "abc1"
+    },
+    {
+      "input": [
+        [
+          "aaaab"
+        ]
+      ],
+      "expected": "aaaab1"
+    },
+    {
+      "input": [
+        [
+          "abccdeeff"
+        ]
+      ],
+      "expected": "abccdeeff1"
+    },
+    {
+      "input": [
+        [
+          "aaaaa"
+        ]
+      ],
+      "expected": "aaaaa1"
+    },
+    {
+      "input": [
+        [
+          "abcd"
+        ]
+      ],
+      "expected": "abcd1"
+    },
+    {
+      "input": [
+        [
+          "aabbccddeeff"
+        ]
+      ],
+      "expected": "aabbccddeeff1"
+    },
+    {
+      "input": [
+        [
+          "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        ]
+      ],
+      "expected": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz1"
+    },
+    {
+      "input": [
+        [
+          "abcdefg"
+        ]
+      ],
+      "expected": "abcdefg1"
+    },
+    {
+      "input": [
+        [
+          "aabbccddeeffgg"
+        ]
+      ],
+      "expected": "aabbccddeeffgg1"
+    },
+    {
+      "input": [
+        [
+          "aaabbbcccdddeeefffggg"
+        ]
+      ],
+      "expected": "aaabbbcccdddeeefffggg1"
+    },
+    {
+      "input": [
+        [
+          "aabbccddeeffggg"
+        ]
+      ],
+      "expected": "aabbccddeeffggg1"
+    },
+    {
+      "input": [
+        [
+          "aabbccddeeffgggg"
+        ]
+      ],
+      "expected": "aabbccddeeffgggg1"
+    },
+    {
+      "input": [
+        [
+          "aabbccddeeffggggg"
+        ]
+      ],
+      "expected": "aabbccddeeffggggg1"
+    }
+  ],
+  "hints": [
+    "반복되는 문자를 찾아 카운트하세요.",
+    "두 개의 포인터를 사용하여 반복을 감지하세요.",
+    "문자열을 순회하면서 현재 문자와 개수를 기록하세요."
+  ],
+  "solution": "function compressString(input) { let result = ''; let count = 1; for (let i = 1; i <= input.length; i++) { if (input[i] === input[i - 1]) { count++; } else { result += input[i - 1] + count; count = 1; } } return result; }",
+  "createdAt": "2026-11-08",
+  "source": "ollama/qwen3:14b",
+  "judge": {
+    "difficulty": "easy",
+    "algorithm": "반복되는 문자를 카운트하며 단일 패스로 처리",
+    "reason": "단일 루프로 문자열을 순회하며 반복 횟수를 계산하고, 결과를 누적하는 간단한 알고리즘을 사용합니다.",
+    "crossChecked": true
+  }
+}
