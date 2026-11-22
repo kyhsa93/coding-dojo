@@ -1,0 +1,236 @@
+{
+  "id": "database-lsm-compaction-cost",
+  "title": "LSM 트리의 컴팩션 비용 계산",
+  "difficulty": "easy",
+  "tags": [
+    "math",
+    "database"
+  ],
+  "statement": "LSM 트리에서 데이터는 여러 레벨의 파일에 저장되며, 각 레벨의 파일 크기는 이전 레벨의 10배입니다. 각 레벨의 파일 수는 주어진 배열 `filesPerLevel`의 요소로 주어집니다. 각 레벨의 파일 크기는 1MB이며, 컴팩션 비용은 레벨별로 파일 수 × 레벨 번호 × 파일 크기의 합입니다. 예를 들어, filesPerLevel = [2, 3, 1]일 경우, 비용은 2×0×1 + 3×1×1 + 1×2×1 = 5MB입니다. `filesPerLevel`이 주어졌을 때, 총 컴팩션 비용을 MB 단위로 계산하세요. 입력은 0개 이상의 정수로 구성된 배열이며, 레벨 번호는 0부터 시작합니다.",
+  "functionName": "calculateCompactionCost",
+  "params": [
+    {
+      "name": "filesPerLevel",
+      "type": "number[]"
+    }
+  ],
+  "returnType": "number",
+  "starterCode": {
+    "javascript": "function calculateCompactionCost(filesPerLevel) {\n  // 여기에 코드를 작성하세요\n}\n",
+    "typescript": "function calculateCompactionCost(filesPerLevel: number[]): number {\n  // 여기에 코드를 작성하세요\n}\n",
+    "python": "def calculateCompactionCost(filesPerLevel: list[int]) -> int:\n    # 여기에 코드를 작성하세요\n    pass\n"
+  },
+  "examples": [
+    {
+      "input": [
+        [
+          2,
+          3,
+          1
+        ]
+      ],
+      "expected": 5,
+      "explanation": "레벨 0: 2×0×1 = 0, 레벨 1: 3×1×1 = 3, 레벨 2: 1×2×1 = 2 → 총 5MB"
+    },
+    {
+      "input": [
+        [
+          0,
+          1,
+          0
+        ]
+      ],
+      "expected": 1,
+      "explanation": "레벨 0: 0×0×1 = 0, 레벨 1: 1×1×1 = 1, 레벨 2: 0×2×1 = 0 → 총 1MB"
+    }
+  ],
+  "tests": [
+    {
+      "input": [
+        [
+          2,
+          3,
+          1
+        ]
+      ],
+      "expected": 5
+    },
+    {
+      "input": [
+        [
+          0,
+          1,
+          0
+        ]
+      ],
+      "expected": 1
+    },
+    {
+      "input": [
+        [
+          5
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          0
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          1,
+          0,
+          0,
+          0
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          10,
+          5,
+          2,
+          1
+        ]
+      ],
+      "expected": 12
+    },
+    {
+      "input": [
+        [
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "expected": 40
+    },
+    {
+      "input": [
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      ],
+      "expected": 10
+    },
+    {
+      "input": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          100
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "input": [
+        [
+          1,
+          10,
+          100
+        ]
+      ],
+      "expected": 210
+    },
+    {
+      "input": [
+        [
+          1,
+          0,
+          1,
+          0,
+          1
+        ]
+      ],
+      "expected": 6
+    },
+    {
+      "input": [
+        [
+          0,
+          1,
+          0,
+          1,
+          0
+        ]
+      ],
+      "expected": 4
+    },
+    {
+      "input": [
+        [
+          5,
+          4,
+          3,
+          2,
+          1
+        ]
+      ],
+      "expected": 20
+    },
+    {
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      ],
+      "expected": 112
+    }
+  ],
+  "hints": [
+    "레벨 번호는 인덱스로 사용됩니다.",
+    "각 레벨의 비용은 파일 수 × 레벨 번호 × 1MB입니다.",
+    "총 비용은 모든 레벨의 비용을 더한 값입니다."
+  ],
+  "solution": "function calculateCompactionCost(filesPerLevel) { let cost = 0; for (let i = 0; i < filesPerLevel.length; i++) { cost += filesPerLevel[i] * i * 1; } return cost; }",
+  "createdAt": "2026-11-22",
+  "source": "ollama/qwen3:14b",
+  "judge": {
+    "difficulty": "easy",
+    "algorithm": "레벨 번호와 파일 수를 순회하며 비용을 누적",
+    "reason": "단순한 반복문과 누적 계산으로 해결 가능하며, 모든 조건이 명확하게 주어짐",
+    "crossChecked": true
+  }
+}
